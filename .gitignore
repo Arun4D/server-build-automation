@@ -1,0 +1,81 @@
+# Byte-compiled Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Ansible
+*.retry
+.facts_cache/
+collections/ansible_collections/
+*.vault_pass
+.vault_pass
+vault_password_file
+
+# GitHub Actions
+# NOTE: .github/workflows/ is NOT ignored, and must never be added here.
+# It is the canonical location for the runtime workflows (AD-12). A runtime
+# workflow anywhere else looks valid and never runs.
+.github/workflow-debug.log
+act/
+
+# Tests and integration artefacts
+tests/output/
+tests/.tmp/
+tests/molecule/*/scenario-*/
+*.log
+.mock_state/
+
+# Mock service local state
+mock/.state/
+
+# Execution Environment build output
+execution-environment/context/
+execution-environment/build/
+execution-environment/_build/
+*.tar
+*.tar.gz
+
+# Credentials. Second line of defence; gitleaks is the first.
+# The platform itself contains no key material: TLS material lives in the
+# secret store. See docs/security/secret-management.md.
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+id_ecdsa*
+.env
+.env.*
+secrets.yml
+credentials.yml
+*.vault
+.vault_pass_*
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

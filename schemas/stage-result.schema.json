@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage-result.schema.json",
+  "title": "SBA stage result",
+  "description": "The structured result of one stage of one run, one entry per host. Written to result.<stage>.json in the run-state store and delivered as an artifact rather than scraped from a log (AD-14). This document exists because a failure that is only a log line is a failure nobody can act on: the per-host status says which server, the error says which code and whether a retry is worthwhile, and the remediation block gives the operator a command that is safe to run. A requester told only FAILED files a ticket; a requester told which stage failed and given the command fixes it themselves. See AD-01, AD-14, AD-16, and docs/api/api-contract.md section 1.5.",
+
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "run_id",
+    "stage",
+    "attempt",
+    "status",
+    "started_at",
+    "finished_at",
+    "duration_s",
+    "execution_engine",
+    "code",
+    "hosts"
+  ],
+
+  "properties": {
+    "schema_version": {
+      "description": "Semantic version of this schema. See AD-20.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "request_id": {
+      "description": "The originating request. The join key to the run state and, downstream, to the request record. See AD-04 and AD-05.",
+      "type": "string",
+      "pattern": "^[A-Z]{2,8}[0-9]{6,12}$"
+    },
+    "correlation_id": {
+      "description": "Propagated from the run context into every log line, so a support request quoting one string finds the whole run. See docs/api/api-contract.md section 4.3.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "run_id": {
+      "description": "This execution attempt. Distinct from request_id so that a resumed run is distinguishable from the original in the state store. See docs/architecture/idempotency.md section 5.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "stage": {
+      "description": "The stage this result describes. The closed set is what makes the stage table statically enumerable, and it is the same set the run context accepts for lifecycle.stage -- two divergent lists would mean a stage could be dispatched that could not be reported. See AD-01 and docs/architecture/role-dependency-model.md.",
+      "type": "string",
+      "enum": ["validate", "bootstrap", "provision", "os_config", "validate_os", "domain_join", "install_agents", "enroll_agents", "dns", "cmdb", "post_build", "report", "destroy"]
+    },
+    "attempt": {
+      "description": "1-based attempt number. Present because a stage result from attempt 2 and one from attempt 3 are different evidence, and folding them into a single latest-value would lose the record that a retry happened. See docs/architecture/failure-and-retry.md.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "status": {
+      "description": "The stage outcome, rolled up from the per-host statuses. SUCCESS means every host completed. PARTIAL is a first-class terminal state that is also resumable: terminal for the automation, because nothing further happens automatically, and resumable for a human, because re-running the stage continues from where it stopped. Mapping PARTIAL to a single boolean loses that distinction, and it is the most likely implementation mistake in a status model. MANUAL_ATTENTION is not terminal in the same sense -- it means the run is waiting for a person. See docs/architecture/request-lifecycle.md section 2 and docs/api/api-contract.md section 2.",
+      "type": "string",
+      "enum": ["SUCCESS", "PARTIAL", "FAILED", "VALIDATION_FAILED", "POLICY_BLOCKED", "APPROVAL_FAILED", "CANCELLED", "MANUAL_ATTENTION"]
+    },
+    "started_at": {
+      "description": "When the stage began, RFC 3339 UTC. Wall-clock stamps are added by the caller, never read by the resolver, which is what keeps the resolver pure. See AD-22.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "description": "When the stage ended, RFC 3339 UTC. Equal to started_at for a stage that was skipped, which is how a skip is distinguished from a stage that never ran.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "format": "date-time"
+    },
+    "duration_s": {
+      "description": "Elapsed seconds. Bounded at 86400 because a stage that reports a longer duration than a day is a clock problem, and an unbounded number here would corrupt every duration roll-up on the result.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400
+    },
+    "execution_engine": {
+      "description": "The engine that executed the stage. Transport metadata, recorded so an operator knows where to look -- but never branched on by a consumer, because engine dispatch is an implementation detail and a consumer that branches on it has coupled itself to one. See AD-09, AD-21, and docs/api/api-contract.md section 4.5.",
+      "type": "string",
+      "const": "GITHUB_ACTIONS"
+    },
+    "execution_url": {
+      "description": "Link to the engine run, so an operator can reach the raw job. Recorded for correlation only; it is never a required field, because a result that cannot be produced without a URL would fail in a context that has no browser to open it.",
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048
+    },
+
+    "code": {
+      "description": "What produced this result. Three values that together make a run reproducible and auditable: the code, the image, and the configuration. A run that can be reproduced from its own result is one that can be debugged after the fact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sba_git_sha", "sba_ee_digest", "catalog_version"],
+      "properties": {
+        "sba_git_sha": {
+          "description": "The full 40-character commit the run executed. Full rather than short because a seven-character abbreviation is ambiguous across the history of a busy repository, and an ambiguous provenance record is worse than none. See docs/architecture/cicd-pipeline.md.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sba_ee_digest": {
+          "description": "The immutable digest of the execution environment, not its tag. The same digest must run nonprod and prod, or a production build can behave differently from the one that was tested -- which is the failure the whole promotion model exists to prevent. See docs/architecture/execution-environment.md.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "catalog_version": {
+          "description": "The configuration tree version, carried from the run context. See docs/architecture/configuration-resolution.md section 5.",
+          "type": "string",
+          "pattern": "^\\d{4}\\.\\d{2}\\.\\d+$"
+        }
+      }
+    },
+
+    "hosts": {
+      "description": "One entry per host the stage addressed, in creation order. Every host is present whether it succeeded, failed, or was skipped, because a host that is absent from the list is indistinguishable from a host that was forgotten -- and an omitted host is exactly the one an operator needs to know about. See docs/architecture/request-lifecycle.md.",
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sba_instance_id", "short_name", "status", "changed", "duration_s"],
+        "properties": {
+          "sba_instance_id": {
+            "description": "The golden join key, correlating this entry with the run context, the GCP label, the DNS record and the CMDB CI. See AD-05.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "short_name": {
+            "description": "NetBIOS name of the host, at most 15 characters. Carried on every stage result so an operator reading a failure never has to join against the context to learn which server it was. See AD-06.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 15,
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "fqdn": {
+            "description": "Fully qualified name. Present from the validate stage onward, where it is derived, so that a DNS or CMDB failure can be read without a lookup. See AD-06.",
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+          },
+          "status": {
+            "description": "This host's outcome. The same vocabulary as the stage status, which is what makes the roll-up rule expressible as a table over (stage, host) pairs and testable rather than described. See docs/api/api-contract.md section 10.",
+            "type": "string",
+            "enum": ["SUCCESS", "PARTIAL", "FAILED", "VALIDATION_FAILED", "POLICY_BLOCKED", "APPROVAL_FAILED", "CANCELLED", "MANUAL_ATTENTION"]
+          },
+          "changed": {
+            "description": "Whether this host was modified. The idempotence assertion: a re-run of a completed stage must report changed == false. A stage that reports changed on a no-op re-run has a non-idempotent task, and this field is how CI catches it. See docs/architecture/idempotency.md section 3.",
+            "type": "boolean"
+          },
+          "duration_s": {
+            "description": "Elapsed seconds for this host. Per host as well as per stage because a PARTIAL stage is usually one slow host and one fast one, and the total alone cannot tell an operator which.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400
+          },
+
+          "gcp": {
+            "description": "The GCP state of this host, as read back. Read-only observation, and the substrate of assert_instance: a stage assertion that does not actually re-read live state is worse than none, because it converts an unverified assumption into a recorded success. See docs/architecture/provider-abstraction.md section 3.4.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "project": {
+                "description": "Project holding the instance.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+              },
+              "zone": {
+                "description": "Zone holding the instance. Immutable after creation, so a read-back that disagrees with the context is IMMUTABLE_MISMATCH and never a converge target. See docs/architecture/cloud/gcp.md section 4.",
+                "type": "string",
+                "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+              },
+              "machine_type": {
+                "description": "Fully qualified machine type as read back, so a resize is verified rather than assumed to have taken effect. See docs/architecture/provider-abstraction.md section 3.2.",
+                "type": "string",
+                "pattern": "^zones/[a-z]+-[a-z]+[0-9]+-[a-z]+/[a-z][a-z0-9-]*$"
+              },
+              "self_link": {
+                "description": "The instance self link. The provider-specific resource identifier recorded on the result and the CI, and the value a destroy keys on. See docs/architecture/provider-abstraction.md section 2.",
+                "type": "string",
+                "pattern": "^https://www\\.googleapis\\.com/compute/v1/projects/[^/]+/zones/[^/]+/instances/[^/]+$"
+              },
+              "private_ip": {
+                "description": "The internal address. The only address the platform records, since placement.external_ip is always false. See docs/architecture/cloud/gcp.md section 6.",
+                "type": "string",
+                "pattern": "^(10\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){2}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|172\\.(1[6-9]|2[0-9]|3[01])\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){1}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|192\\.168\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){1}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))$"
+              },
+              "labels_converged": {
+                "description": "Whether the GCP labels already matched the resolved metadata, verified by a read-back. This is invariant I-6 of AD-11 and the reason the overwhelming majority of re-runs produce no control-plane events at all. When false, reboot_required is true: labels can only be set at creation on GCP, so a correction is a stop, modify, start -- which is a reboot-equivalent event and is reported as one rather than hidden inside a changed count. See docs/architecture/cloud/gcp.md sections 3.2 and 3.4.",
+                "type": "boolean"
+              },
+              "reboot_required": {
+                "description": "Whether a reboot-equivalent stop/start is required to reach the desired state, which on GCP is the only way to change a label. Explicit rather than implied by changed, because a reboot is a disruptive event for a production host and must be visible in the result rather than discovered from a dropped session. See docs/architecture/cloud/gcp.md section 3.4.",
+                "type": "boolean"
+              },
+              "adopted": {
+                "description": "Whether the instance already existed and was adopted rather than created. Recorded because it is the difference between a build and a recovery, and a destroy is only ever permitted to delete resources where adopted is false -- deleting an adopted resource would destroy something the platform did not create. See docs/architecture/provider-abstraction.md section 3.1 and docs/architecture/idempotency.md section 10.",
+                "type": "boolean"
+              },
+              "image": {
+                "description": "The image self link as read back, compared against the pinned value. A mismatch is OS_VERSION_MISMATCH and is not retryable: the remedy is a rebuild, not a retry. See docs/architecture/cloud/gcp.md section 5.",
+                "type": "string",
+                "pattern": "^https://www\\.googleapis\\.com/compute/v1/projects/[^/]+/global/images/[^/]+$"
+              }
+            }
+          },
+
+          "error": {
+            "description": "Why this host failed. Present exactly when status is not SUCCESS, so that a SUCCESS entry carrying an error is rejected by the resolver's own consistency check rather than being quietly ignored downstream.",
+            "$ref": "#/$defs/host_error"
+          }
+        }
+      }
+    },
+
+    "diagnostics": {
+      "description": "Structured findings that are not failures. Warnings, degraded conditions, and assertions that passed marginally. Present so a stage can report something an operator needs without inventing a failure to carry it -- a warning promoted to an error trains people to ignore warnings, and a warning dropped entirely means the condition is never noticed.",
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["level", "code", "message"],
+        "properties": {
+          "level": {
+            "description": "Severity. A closed set, so a consumer switches on it rather than parsing the message.",
+            "type": "string",
+            "enum": ["info", "warning", "error"]
+          },
+          "code": {
+            "description": "An identifier from the error registry, so a diagnostic is queryable by the same vocabulary as a failure. See docs/api/api-contract.md section 3.2.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+          },
+          "message": {
+            "description": "A message from the closed template set. Never a raw exception, never a secret, and never a configuration value that could be sensitive, because this text reaches a requester-facing surface. A sanitisation test in CI is what keeps that promise honest. See docs/api/api-contract.md sections 3.1 and 10.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "host_short_name": {
+            "description": "The host this concerns, when it concerns one. Absent for a run-wide finding.",
+            "type": "string",
+            "maxLength": 15,
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          }
+        }
+      }
+    },
+
+    "remediation": {
+      "description": "What the operator should do next. This is the block that turns a failure into a resolution, and it is the reason stage independence (AD-01) and retention (AD-16) are worth their cost: because nothing is destroyed and any stage can be re-run alone, there is always a next action that is safe. A PARTIAL without this block is a ticket; a PARTIAL with it is a fix.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommand", "note"],
+      "properties": {
+        "recommand": {
+          "description": "A ready-to-run command. Extra-vars here contain only a path to the stored context and the stage name -- never a value from it -- because extra-vars are logged by the engine and anything placed there is disclosed. See AD-15 and docs/security/secret-management.md.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^ansible-playbook [a-zA-Z0-9_./-]+ -e @[a-zA-Z0-9_./-]+ -e '\\{\"stage\":\"[a-z_]+\"\\}'$"
+        },
+        "note": {
+          "description": "What the command will and will not do, in one sentence. Stating that re-running will not re-provision is the single most useful sentence in the document, because the natural fear after a failed build is that a retry will create a duplicate server.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "reversible": {
+            "description": "Whether the stage is safely re-runnable. False only where re-running would itself be destructive, which in this release is nowhere: every stage is idempotent, and a stage that is not is a bug rather than a case. Present so a future stage can declare itself irreversible without inventing a new field.",
+            "type": "boolean",
+            "default": true
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "host_error": {
+      "description": "A single host's failure. The code is a stable machine-readable identifier, never localised and never reworded, because consumers switch on it; the message is built from a closed template set and is what a human reads; and retryable is a property of the condition rather than of the stage, which is the distinction most easily got wrong. DOMAIN_DC_UNREACHABLE is retryable and DOMAIN_CREDENTIAL_INVALID is not, and they are the same stage -- classifying by stage would get this wrong, and retrying a credential failure would multiply failed logons and could lock the service account. See docs/api/api-contract.md sections 3.1 and 3.2, and docs/architecture/failure-and-retry.md section 4.2.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "retryable", "message"],
+      "properties": {
+        "code": {
+          "description": "The error code. A code is never renamed or repurposed; a retired code becomes RESERVED, so a consumer that switches on it keeps working. See docs/api/api-contract.md section 3.2.",
+          "$ref": "#/$defs/error_code"
+        },
+        "retryable": {
+          "description": "Whether an automatic retry is worthwhile. A quota or an IP exhaustion is not retryable because it does not restore itself inside a retry window, so retrying is pure delay; a rate limit is retryable and the two are routinely confused. See docs/architecture/failure-and-retry.md section 2.",
+          "type": "boolean"
+        },
+        "message": {
+          "description": "What happened, from a closed template set. Never a raw exception and never a secret. See docs/api/api-contract.md section 3.1.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "actionable": {
+          "description": "What to do instead. The field that prevents a ticket. Optional on a per-host stage error because the stage-level remediation covers it, and required on the requester-facing result. See docs/api/api-contract.md section 3.1.",
+          "type": "string",
+          "maxLength": 2048
+        },
+        "detail_source": {
+          "description": "A JSON pointer into the stored context, e.g. context.json#/preflight/13. The detail is referenced rather than inlined so that the response stays small and does not leak estate topology into a widely-readable surface. See docs/api/api-contract.md section 3.1 and section 5.3.",
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^(context|result\\.[a-z_]+|run_result)\\.json#(/[^\\s]*)?$"
+        },
+        "stage_detail": {
+          "description": "The task or role that failed, e.g. system.domain_join. Present because a stage name alone points at a stage of eight tasks, and this is what narrows it to one.",
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+
+    "error_code": {
+      "description": "The stable error registry, enumerated so that a code cannot be invented at a call site and so that CI can assert every code a role can raise is a code the registry documents. Codes are contract: a consumer may switch on them. See docs/api/api-contract.md section 3.2.",
+      "type": "string",
+      "enum": [
+        "SCHEMA_INVALID",
+        "UNSUPPORTED_ENUM_VALUE",
+        "UNSUPPORTED_SCHEMA_VERSION",
+        "CONTRACT_FORBIDDEN_FIELD",
+        "REQUEST_MODIFIED",
+        "NO_APPROVED_CONFIGURATION",
+        "PRECEDENCE_CONFLICT",
+        "RESOLUTION_CONFLICT",
+        "IMAGE_NOT_FOUND",
+        "IMAGE_NOT_APPROVED",
+        "IMAGE_EXPIRED",
+        "IMAGE_REVOKED",
+        "NAME_UNRESOLVABLE",
+        "NAME_TAKEN",
+        "TAG_MAPPING_INCOMPLETE",
+        "POLICY_VIOLATION",
+        "APPROVAL_FAILED",
+        "CHANGE_FREEZE_ACTIVE",
+        "COMPLIANCE_MISSING",
+        "REGION_NOT_AVAILABLE",
+        "SIZE_NOT_AVAILABLE_IN_REGION",
+        "SCOPE_NOT_ACCESSIBLE",
+        "PARENT_SCOPE_MISSING",
+        "NETWORK_MISMATCH",
+        "SUBNET_IP_EXHAUSTED",
+        "SECURITY_POLICY_MISSING",
+        "QUOTA_EXCEEDED",
+        "RUNNER_NOT_REACHABLE",
+        "IDENTITY_UNAVAILABLE",
+        "SOURCE_UNAVAILABLE",
+        "EE_UNAVAILABLE",
+        "STATE_STORE_UNAVAILABLE",
+        "CLOUD_API_TIMEOUT",
+        "CLOUD_API_THROTTLED",
+        "RESOURCE_CONFLICT",
+        "PROVISION_FAILED",
+        "TAG_WRITE_INCOMPLETE",
+        "IMMUTABLE_MISMATCH",
+        "AMBIGUOUS_RESOURCE",
+        "HOST_UNREACHABLE",
+        "WINRM_NOT_READY",
+        "SSH_NOT_READY",
+        "GUEST_AGENT_TIMEOUT",
+        "REBOOT_TIMEOUT",
+        "OS_VERSION_MISMATCH",
+        "BASELINE_DRIFT",
+        "DOMAIN_DC_UNREACHABLE",
+        "DOMAIN_JOIN_TIMEOUT",
+        "DOMAIN_CREDENTIAL_INVALID",
+        "DOMAIN_OU_NOT_FOUND",
+        "AGENT_INSTALL_FAILED",
+        "AGENT_NOT_ENROLLED",
+        "AGENT_NOT_REPORTING",
+        "DNS_RECORD_CONFLICT",
+        "DNS_ZONE_NOT_FOUND",
+        "DNS_PROPAGATION_TIMEOUT",
+        "CMDB_WRITE_FAILED",
+        "CMDB_DUPLICATE_DETECTED",
+        "INDETERMINATE_AT_PREFLIGHT",
+        "TIMEOUT",
+        "CANCELLED",
+        "RESOLVER_ERROR",
+        "INTERNAL_ERROR"
+      ]
+    }
+  }
+}

@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-result.schema.json",
+  "title": "SBA run result (final roll-up)",
+  "description": "The final result of one run, rolled up across every stage and every host. Written to run_result.json in the run-state store and delivered as an artifact (AD-14), and the only document an external consumer needs: the full technical context stays in the state store and is correlated to this result by resolved_config_hash, so an auditor can confirm the two correspond without the topology ever leaving it. See AD-14, AD-16, docs/api/api-contract.md sections 1.6 and 5.2, and docs/architecture/request-lifecycle.md.",
+
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "run_id",
+    "status",
+    "terminal",
+    "attempt",
+    "execution_engine",
+    "started_at",
+    "finished_at",
+    "build_duration_s",
+    "code",
+    "image_version",
+    "summary",
+    "servers",
+    "stages"
+  ],
+
+  "properties": {
+    "schema_version": {
+      "description": "Semantic version of this schema. See AD-20.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "request_id": {
+      "description": "The originating request. The join key to the run state and to the request record. See AD-04 and AD-05.",
+      "type": "string",
+      "pattern": "^[A-Z]{2,8}[0-9]{6,12}$"
+    },
+    "correlation_id": {
+      "description": "Propagated from the run context into every log line, so a support request quoting one string finds the whole run. See docs/api/api-contract.md section 4.3.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "run_id": {
+      "description": "This execution attempt. See docs/architecture/idempotency.md section 5.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+
+    "status": {
+      "description": "The overall outcome, rolled up from the stages. The vocabulary is shared with the stage result so the roll-up is a table over (stage, host) pairs rather than a second, parallel set of concepts. The values a consumer is most likely to get wrong: PARTIAL is terminal for the automation and resumable for a human, and must not be mapped to a failed state, because mapping it to failure invites deleting the request record and orphaning retained infrastructure; MANUAL_ATTENTION is not terminal at all but awaiting a person; APPROVAL_FAILED is reserved for the production approval re-verification, while a technical policy failure is POLICY_BLOCKED. See docs/architecture/request-lifecycle.md section 2 and docs/api/api-contract.md section 2.",
+      "type": "string",
+      "enum": [
+        "RECEIVED",
+        "QUEUED",
+        "RESOLVING",
+        "VALIDATING",
+        "IN_PROGRESS",
+        "STAGE_COMPLETE",
+        "SUCCESS",
+        "PARTIAL",
+        "FAILED",
+        "VALIDATION_FAILED",
+        "POLICY_BLOCKED",
+        "APPROVAL_FAILED",
+        "CANCELLING",
+        "CANCELLED",
+        "MANUAL_ATTENTION"
+      ]
+    },
+    "terminal": {
+      "description": "Whether the automation will take no further action. Explicit rather than derivable from status, because the mapping is not a function: PARTIAL and MANUAL_ATTENTION are both terminal in the sense that nothing happens automatically, PARTIAL and MANUAL_ATTENTION are not terminal in the sense that no further state change will occur on its own, and MANUAL_ATTENTION is not terminal at all because a person must act. Collapsing these into one boolean is the most likely implementation mistake in the whole status model. See docs/api/api-contract.md section 2.",
+      "type": "boolean"
+    },
+    "attempt": {
+      "description": "1-based attempt number for the whole run. See docs/architecture/failure-and-retry.md.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+
+    "execution_engine": {
+      "description": "The engine that executed the run. An observation, never a requirement: a consumer that branches on this value has coupled itself to an implementation detail, and the value is allowed to change when the engine routing changes without any consumer changing. See AD-09, AD-21, and docs/api/api-contract.md section 4.5.",
+      "type": "string",
+      "const": "GITHUB_ACTIONS"
+    },
+    "execution_url": {
+      "description": "Link to the engine run, so an operator can reach the raw job. Correlation only.",
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048
+    },
+
+    "started_at": {
+      "description": "When the run began, RFC 3339 UTC. Includes the resolution and pre-flight time, so the number a requester sees is the whole wait rather than only the part that looks like work. See A-48.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "description": "When the run reached its terminal state, RFC 3339 UTC. Absent only while the run is still in flight, which is what distinguishes a running result from a finished one.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "format": "date-time"
+    },
+    "build_duration_s": {
+      "description": "Total elapsed seconds. Bounded at 604800 (seven days), which is the point past which a run is treated as lost rather than slow, because a stuck job holding a concurrency slot is a platform outage rather than a slow build. See docs/architecture/failure-and-retry.md section 8.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 604800
+    },
+
+    "code": {
+      "description": "What produced this result. The code, the image and the configuration together are what make a run reproducible, and a run that cannot be reproduced from its own result cannot be debugged after the fact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sba_git_sha", "sba_ee_digest", "catalog_version"],
+      "properties": {
+        "sba_git_sha": {
+          "description": "The full 40-character commit. Full rather than short, because a seven-character abbreviation is ambiguous across a busy history and an ambiguous provenance record is worse than none. See docs/architecture/cicd-pipeline.md.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sba_ee_digest": {
+          "description": "The immutable execution environment digest, not its tag. The same digest must run nonprod and prod, or a production build can behave differently from the one that was tested. See docs/architecture/execution-environment.md.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "catalog_version": {
+          "description": "The configuration tree version. See docs/architecture/configuration-resolution.md section 5.",
+          "type": "string",
+          "pattern": "^\\d{4}\\.\\d{2}\\.\\d+$"
+        }
+      }
+    },
+
+    "image_version": {
+      "description": "Human-readable identification of the image the run built from, e.g. ubuntu-2204-lts-gold-v20260901. Preferred over an image resource ID on any requester-facing surface, because it is both readable and unambiguous, whereas a self link exposes the project that owns the image catalogue. See docs/api/api-contract.md section 5.3 and docs/architecture/cloud/gcp.md section 5.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+
+    "summary": {
+      "description": "The resolved facts an operator or an auditor needs without opening the context. Deliberately thin: everything here is also in the stored context, and duplicating anything more would create a second copy that can disagree with the first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "gcp_region", "zones", "compute_class", "os_version", "policies_applied", "resolved_config_hash"],
+      "properties": {
+        "provider": {
+          "description": "Lower-case provider key, matching the run context. See docs/architecture/cloud/gcp.md.",
+          "type": "string",
+          "const": "gcp"
+        },
+        "gcp_region": {
+          "description": "The GCP region the run was placed in, e.g. europe-west1.",
+          "type": "string",
+          "pattern": "^[a-z]+-[a-z]+[0-9]$"
+        },
+        "zones": {
+          "description": "The zones the run's instances were distributed across. Plural, because a batch may be spread, and the distribution is a capacity decision rather than a resilience one: a GCP zone is a deployment locality with no capacity-isolated failure-domain guarantee, and this platform does not present it as one. See docs/architecture/cloud/gcp.md section 2.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+          }
+        },
+        "compute_class": {
+          "description": "The machine type the run resolved to. See docs/architecture/provider-abstraction.md section 3.2.",
+          "type": "string",
+          "pattern": "^zones/[a-z]+-[a-z]+[0-9]+-[a-z]+/[a-z][a-z0-9-]*$"
+        },
+        "os_version": {
+          "description": "The guest OS version as read back from the host, e.g. Ubuntu 22.04.4 LTS. Recorded as observed rather than as configured, because the two differ whenever an image is rebuilt without a version bump -- which is exactly the case a DescribeImage comparison exists to catch, and it is why image.build_date is carried in the context. See docs/architecture/cloud/gcp.md section 5.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "policies_applied": {
+          "description": "Every policy that contributed to this run, e.g. enterprise, production, cis_linux_2025_1. The audit answer to which floor applied, without re-deriving it from the catalogue.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "resolved_config_hash": {
+          "description": "A hash over the stored run context. The mechanism by which a request record and a stored context are confirmed to correspond while the topology stays in the state store: the request carries the hash, the state store holds the context, and neither side has to disclose anything to prove the link. See docs/api/api-contract.md section 5.2 and docs/architecture/request-lifecycle.md section 7.1.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+
+    "servers": {
+      "description": "One entry per server the run addressed, in creation order, including those that failed after gate three. A server absent from this list is indistinguishable from a server that was never requested, which is why a failed run lists what it retained rather than only what succeeded. See AD-16 and docs/architecture/request-lifecycle.md.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sba_instance_id", "short_name", "fqdn", "build_status", "post_build_status"],
+        "properties": {
+          "sba_instance_id": {
+            "description": "The golden join key, present in the cloud tag set, the DNS record set and the CMDB record. Those three agreeing is the single assertion that ties a request, a server, a name and a CMDB entry together, and it is checked rather than assumed. See AD-05 and docs/architecture/idempotency.md.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "short_name": {
+            "description": "NetBIOS computer name, at most 15 characters. See AD-06.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 15,
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "fqdn": {
+            "description": "Fully qualified name, as registered. See AD-06.",
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+          },
+          "private_ip": {
+            "description": "The internal address. The only address recorded, since placement.external_ip is always false in this release. See docs/architecture/cloud/gcp.md section 6.",
+            "type": "string",
+            "pattern": "^(10\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){2}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|172\\.(1[6-9]|2[0-9]|3[01])\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){1}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|192\\.168\\.((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){1}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))$"
+          },
+          "zone": {
+            "description": "The zone this server was placed in. See docs/architecture/cloud/gcp.md section 2.",
+            "type": "string",
+            "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+          },
+          "cloud_resource_id": {
+            "description": "The provider resource identifier, i.e. the instance self link. Recorded because a destroy keys on it, and because an operator investigating an incident starts from it. See docs/architecture/provider-abstraction.md section 2.",
+            "type": "string",
+            "pattern": "^https://www\\.googleapis\\.com/compute/v1/projects/[^/]+/zones/[^/]+/instances/[^/]+$"
+          },
+          "build_status": {
+            "description": "The outcome of the build half of the run, stages one to eight. See docs/architecture/request-lifecycle.md.",
+            "type": "string",
+            "enum": ["SUCCESS", "PARTIAL", "FAILED", "VALIDATION_FAILED", "POLICY_BLOCKED", "APPROVAL_FAILED", "CANCELLED", "MANUAL_ATTENTION", "NOT_STARTED"]
+          },
+          "post_build_status": {
+            "description": "The outcome of the post-build half. A separate field from build_status because the two halves are separately executable and separately reportable, and because a server that built correctly but failed agent enrolment is a materially different situation from one that failed to build -- the first is a usable server with an unfinished step, the second may be a half-provisioned resource. See AD-01 and docs/architecture/request-lifecycle.md.",
+            "type": "string",
+            "enum": ["SUCCESS", "PARTIAL", "FAILED", "CANCELLED", "MANUAL_ATTENTION", "NOT_STARTED"]
+          },
+          "cmdb_ci_sys_id": {
+            "description": "The CMDB CI record created or updated for this server. Absent where the cmdb stage did not run or did not complete, which is the normal case for a run that failed earlier.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "ad_computer_dn": {
+            "description": "The distinguished name of the directory computer object. Present after domain_join. Carried here and not on the CI alone because a name that resolves in DNS but not in the directory is the most common post-join failure and needs to be diagnosable from the result. See docs/architecture/domain-join.md and docs/api/api-contract.md section 5.3.",
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^CN=[^,]+,(?:(?:OU|CN|DC)=[^,]+,)*(?:DC=[^,]+,)*DC=[^,]+$"
+          }
+        }
+      }
+    },
+
+    "stages": {
+      "description": "One entry per stage, in execution order, including stages that did not run. A stage that never ran is not the same as a stage that was skipped by a guard, and neither is the same as one that failed; omitting the distinction is how a run reports eight successful stages when only four executed. See docs/architecture/request-lifecycle.md section 2.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage", "status", "duration_s", "attempt"],
+        "properties": {
+          "stage": {
+            "description": "The stage name. The same closed set the run context and the stage result accept, so the three documents cannot disagree about what a stage is called. See AD-01.",
+            "type": "string",
+            "enum": ["validate", "bootstrap", "provision", "os_config", "validate_os", "domain_join", "install_agents", "enroll_agents", "dns", "cmdb", "post_build", "report", "destroy"]
+          },
+          "status": {
+            "description": "The stage outcome, copied from the stage result so the roll-up needs no second query. See docs/api/api-contract.md section 2.",
+            "type": "string",
+            "enum": ["SUCCESS", "PARTIAL", "FAILED", "VALIDATION_FAILED", "POLICY_BLOCKED", "APPROVAL_FAILED", "CANCELLED", "MANUAL_ATTENTION", "NOT_STARTED", "SKIPPED"]
+          },
+          "duration_s": {
+            "description": "Elapsed seconds for the stage. See docs/architecture/failure-and-retry.md section 8.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "attempt": {
+            "description": "Which attempt produced this stage outcome, so a stage that succeeded on attempt 2 is distinguishable from one that succeeded first time.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "error_code": {
+            "description": "The error code when the stage did not succeed, so a roll-up can be filtered by code without reading every stage result. See docs/api/api-contract.md section 3.2.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+          }
+        }
+      }
+    },
+
+    "error": {
+      "description": "The single error that best characterises the run. Present when status is not SUCCESS. Which error that is, on a run where three stages failed three different ways, is a roll-up rule and must be specified rather than left to whichever error was written last: a run that reported the last error written would show a DNS problem when the real cause was a domain join that never happened, and the operator would chase the wrong thing. See docs/architecture/failure-and-retry.md and docs/architecture/request-lifecycle.md section 2.",
+      "$ref": "#/$defs/run_error"
+    },
+
+    "remediation": {
+      "description": "The operator's next action. Present whenever status is not SUCCESS, and the reason is AD-16: a failed run retains its infrastructure, so there is always something to fix rather than something to clean up, and a run that retains resources without saying what to do with them leaves a billable server nobody owns. See AD-16 and docs/api/api-contract.md section 1.6.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommand", "note"],
+      "properties": {
+        "recommand": {
+          "description": "A ready-to-run command. Extra-vars contain only a path to the stored context and a stage name, never a value from it, because extra-vars are logged by the engine and anything placed there is disclosed. See AD-15.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^ansible-playbook [a-zA-Z0-9_./-]+ -e @[a-zA-Z0-9_./-]+ -e '\\{\"stage\":\"[a-z_]+\"\\}'$"
+        },
+        "note": {
+          "description": "What the command will and will not do. Stating that the infrastructure is retained by policy and that no server will be created or destroyed is the sentence that stops an operator from opening a teardown ticket for a recoverable failure. See AD-16.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "reversible": {
+          "description": "Whether the recommended action is safe to repeat.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "run_error": {
+      "description": "The run-level error. The same shape as a per-host error, with the two requester-facing fields required rather than optional, because this is the document that reaches a person who did not build the platform. See docs/api/api-contract.md section 3.1.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "retryable", "message", "actionable", "detail_source", "stage"],
+      "properties": {
+        "code": {
+          "description": "A stable, machine-readable code from the registry. Never localised, never reworded; a consumer may switch on it. See docs/api/api-contract.md section 3.2.",
+          "$ref": "#/$defs/error_code"
+        },
+        "retryable": {
+          "description": "Whether an automatic retry is worthwhile. A property of the condition, not of the stage. See docs/architecture/failure-and-retry.md section 2.",
+          "type": "boolean"
+        },
+        "message": {
+          "description": "What happened, from a closed template set. Never a raw exception, never a secret, and never a configuration value that could be sensitive. A CI sanitisation test is what keeps this honest. See docs/api/api-contract.md sections 3.1 and 10.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "actionable": {
+          "description": "What to do instead, written for the person who raised the request. Required here rather than optional, because this is the field that prevents a ticket. Stored verbatim wherever the run is reported, never paraphrased by an intermediary -- a paraphrase loses the instruction and leaves the reader with the problem and no next step. See docs/api/api-contract.md sections 3.1 and 6.5.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "detail_source": {
+          "description": "A JSON pointer into the stored context, e.g. context.json#/preflight/13. The detail is referenced rather than inlined so the response stays small and estate topology does not leak into a widely-readable surface. See docs/api/api-contract.md section 5.3.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(context|result\\.[a-z_]+|run_result)\\.json#(/[^\\s]*)?$"
+        },
+        "stage": {
+          "description": "The stage the run failed in. Present on the run-level error as well as in the stages array, because the first question an operator asks is which stage, and making them search for it is a small cost paid on every failure. See docs/api/api-contract.md section 3.1.",
+          "type": "string",
+          "pattern": "^(intake|resolve|validate|bootstrap|provision|os_config|validate_os|domain_join|install_agents|enroll_agents|dns|cmdb|post_build|report|destroy|any)$"
+        }
+      }
+    },
+
+    "error_code": {
+      "description": "The stable error registry, enumerated so a code cannot be invented at a call site and so CI can assert every code a role can raise is documented. Kept byte-identical to the registry in stage-result.schema.json; a conformance test asserts the two never diverge, because two registries would mean a consumer switching on a code cannot know which list it is reading. See docs/api/api-contract.md section 3.2.",
+      "type": "string",
+      "enum": [
+        "SCHEMA_INVALID",
+        "UNSUPPORTED_ENUM_VALUE",
+        "UNSUPPORTED_SCHEMA_VERSION",
+        "CONTRACT_FORBIDDEN_FIELD",
+        "REQUEST_MODIFIED",
+        "NO_APPROVED_CONFIGURATION",
+        "PRECEDENCE_CONFLICT",
+        "RESOLUTION_CONFLICT",
+        "IMAGE_NOT_FOUND",
+        "IMAGE_NOT_APPROVED",
+        "IMAGE_EXPIRED",
+        "IMAGE_REVOKED",
+        "NAME_UNRESOLVABLE",
+        "NAME_TAKEN",
+        "TAG_MAPPING_INCOMPLETE",
+        "POLICY_VIOLATION",
+        "APPROVAL_FAILED",
+        "CHANGE_FREEZE_ACTIVE",
+        "COMPLIANCE_MISSING",
+        "REGION_NOT_AVAILABLE",
+        "SIZE_NOT_AVAILABLE_IN_REGION",
+        "SCOPE_NOT_ACCESSIBLE",
+        "PARENT_SCOPE_MISSING",
+        "NETWORK_MISMATCH",
+        "SUBNET_IP_EXHAUSTED",
+        "SECURITY_POLICY_MISSING",
+        "QUOTA_EXCEEDED",
+        "RUNNER_NOT_REACHABLE",
+        "IDENTITY_UNAVAILABLE",
+        "SOURCE_UNAVAILABLE",
+        "EE_UNAVAILABLE",
+        "STATE_STORE_UNAVAILABLE",
+        "CLOUD_API_TIMEOUT",
+        "CLOUD_API_THROTTLED",
+        "RESOURCE_CONFLICT",
+        "PROVISION_FAILED",
+        "TAG_WRITE_INCOMPLETE",
+        "IMMUTABLE_MISMATCH",
+        "AMBIGUOUS_RESOURCE",
+        "HOST_UNREACHABLE",
+        "WINRM_NOT_READY",
+        "SSH_NOT_READY",
+        "GUEST_AGENT_TIMEOUT",
+        "REBOOT_TIMEOUT",
+        "OS_VERSION_MISMATCH",
+        "BASELINE_DRIFT",
+        "DOMAIN_DC_UNREACHABLE",
+        "DOMAIN_JOIN_TIMEOUT",
+        "DOMAIN_CREDENTIAL_INVALID",
+        "DOMAIN_OU_NOT_FOUND",
+        "AGENT_INSTALL_FAILED",
+        "AGENT_NOT_ENROLLED",
+        "AGENT_NOT_REPORTING",
+        "DNS_RECORD_CONFLICT",
+        "DNS_ZONE_NOT_FOUND",
+        "DNS_PROPAGATION_TIMEOUT",
+        "CMDB_WRITE_FAILED",
+        "CMDB_DUPLICATE_DETECTED",
+        "INDETERMINATE_AT_PREFLIGHT",
+        "TIMEOUT",
+        "CANCELLED",
+        "RESOLVER_ERROR",
+        "INTERNAL_ERROR"
+      ]
+    }
+  }
+}

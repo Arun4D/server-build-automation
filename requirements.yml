@@ -1,0 +1,48 @@
+---
+# Collections required by the platform.
+#
+# Every version is pinned exactly. An unpinned collection is how a production
+# build changes behaviour because a dependency shipped a release.
+#
+# CI gate: every ansible.builtin / <namespace>.<collection> referenced by a role
+# must be declared here. An undeclared dependency resolves at build time from
+# whatever happens to be installed, which is non-deterministic by construction.
+#
+# See docs/architecture/repository-structure.md section 13.
+
+collections:
+  # --- core ---------------------------------------------------------------
+  # Pinned explicitly so the EE build is reproducible even for the bundled
+  # collection.
+  - name: ansible.builtin
+    version: "2.16.14"
+
+  # --- platform, DNS, crypto ----------------------------------------------
+  - name: ansible.posix
+    version: "1.5.4"
+  - name: ansible.netcommon
+    version: "6.1.0"
+  - name: community.crypto
+    version: "2.22.0"
+
+  # --- Windows ------------------------------------------------------------
+  - name: ansible.windows
+    version: "2.3.0"
+
+  # --- DNS ----------------------------------------------------------------
+  - name: community.dns
+    version: "2.7.0"
+
+  # --- cloud providers ----------------------------------------------------
+  # azure.azcollection, not community.azure: the collection was donated to the
+  # azure namespace, and the old one is deprecated with a slower patch cadence.
+  - name: azure.azcollection
+    version: "2.5.0"
+  - name: amazon.aws
+    version: "8.2.0"
+  - name: google.cloud
+    version: "2.3.0"
+
+  # --- general ------------------------------------------------------------
+  - name: community.general
+    version: "8.6.0"

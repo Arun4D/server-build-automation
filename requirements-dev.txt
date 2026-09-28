@@ -1,0 +1,39 @@
+# Development and CI tooling. Pinned exactly, like requirements.yml.
+#
+# Installed into the CI environment and into the developer virtualenv, never
+# into the Execution Environment. The EE contains only what the automation needs
+# at run time (see execution-environment/requirements.txt).
+
+# --- linting ---------------------------------------------------------------
+ansible-lint==24.2.3
+ansible-core==2.16.14
+yamllint==1.35.1
+actionlint==1.6.26
+ruff==0.4.4
+mypy==1.10.0
+shellcheck-py==0.10.0.1
+flake8==7.0.0
+
+# --- testing ---------------------------------------------------------------
+pytest==8.2.1
+pytest-cov==5.0.0
+pytest-asyncio==0.23.7
+hypothesis==6.99.13
+molecule==24.2.1
+molecule-plugins==23.4.1
+molecule-docker==24.0.1
+ansible-lint-molecule==24.2.2
+ansible-builder==24.2.0
+docker==7.0.0
+
+# --- security --------------------------------------------------------------
+bandit==1.7.7
+semgrep==1.84.0
+pip-audit==2.7.2
+safety==3.2.0
+
+# --- fixtures and validation ----------------------------------------------
+jsonschema==4.22.0
+check-jsonschema==0.28.6
+PyYAML==6.0.1
+Jinja2==3.1.4

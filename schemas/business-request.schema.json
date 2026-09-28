@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "business-request.schema.json",
+  "title": "SBA run contract (business request)",
+  "description": "The only input to the platform. Nine business fields: engine-neutral, provider-neutral in form, and business-only in content. Scope of this schema is GCP on GitHub Actions. Every technical value -- project, zone, machine type, image, network, labels -- is derived inside the platform from the reviewed catalogue. See AD-02 and docs/api/api-contract.md section 1. This schema is a control, not documentation: a field that is not here cannot reach a module, additionalProperties is false at every level so a nested object cannot smuggle one in, and a value that fails an enum is rejected at the trust boundary rather than passed to a module.",
+
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": [
+    "schema_version",
+    "request_id",
+    "application",
+    "environment",
+    "cloud",
+    "region",
+    "server_role",
+    "os",
+    "count"
+  ],
+
+  "properties": {
+    "schema_version": {
+      "description": "Semantic version of this contract. Pinned by the caller, never derived from a request. A consumer must reject an unknown major with UNSUPPORTED_SCHEMA_VERSION; a minor bump is additive and unknown fields must be ignored rather than rejected. See AD-20 and docs/api/api-contract.md section 9.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "request_id": {
+      "description": "The originating request number, e.g. a RITM number. Canonical, not user-supplied. This is the idempotency key and the run-state object prefix, so a re-submission of the same id resumes the same run instead of starting a second one, and a modified contract under the same id is REQUEST_MODIFIED rather than a silent overwrite. See AD-04 and docs/architecture/idempotency.md.",
+      "type": "string",
+      "pattern": "^[A-Z]{2,8}[0-9]{6,12}$"
+    },
+    "application": {
+      "description": "Business application code, chosen from the application register. Must be registered in configuration/applications/; an unregistered code is NO_APPROVED_CONFIGURATION and is never auto-created, because a catalogue that can self-populate is a catalogue nobody reviews. The code drives the project, the network tier, the cost centre and the owner group. See AD-19.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,31}$",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "environment": {
+      "description": "Target environment. A control boundary, not only a label: it selects the policy floor, the GitHub Actions environment (and therefore its approval gate), the GCP project, and the workload identity federation subject. Derived from the register and cross-checked by the platform.",
+      "type": "string",
+      "enum": ["DEV", "NONPROD", "PROD"]
+    },
+    "cloud": {
+      "description": "Cloud provider. Single-valued in this release: GCP only. The field is retained because it is part of the durable contract, and widening it is a minor bump under AD-20 -- an enum addition is additive and a consumer rejects an unknown member with UNSUPPORTED_ENUM_VALUE rather than passing it through. A closed set is the control that stops a buggy or compromised caller injecting a value that reaches a provider module. See docs/architecture/cloud/gcp.md.",
+      "type": "string",
+      "enum": ["GCP"]
+    },
+    "region": {
+      "description": "Business region code, e.g. EU or US. Resolved to a GCP region such as europe-west1 through configuration/regions/. Must be inside the application's approved footprint. The concrete GCP region, and the zone within it, are deliberately NOT expressible here -- hence region_name and zone are forbidden properties. A zone that does not exist in the target region must fail at resolution, not at apply. See AD-19 and docs/architecture/cloud/gcp.md section 2.",
+      "type": "string",
+      "pattern": "^[A-Z]{2,4}$",
+      "minLength": 2,
+      "maxLength": 4
+    },
+    "server_role": {
+      "description": "What kind of server is wanted, chosen from the role register. Must be registered in configuration/server_roles/. The role determines the machine type floor, the disk shape, the baseline, and the required agents.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,31}$",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "os": {
+      "description": "OS family, chosen from the OS register. A business choice with a technical consequence: it selects the pinned image entry, the CIS baseline, and the configuration and connection method. Closed enum -- an unvalidated string here would eventually reach a shell or a module argument.",
+      "type": "string",
+      "enum": ["LINUX", "WINDOWS"]
+    },
+    "count": {
+      "description": "How many servers. Bounded at 16 here as a transport ceiling, and bounded again per server_role and per environment by configuration/policies/; the tighter bound wins. An unbounded integer is a denial-of-service vector and count is the field a requester pushes hardest. Above the per-environment maximum this is QUOTA_EXCEEDED, never a silent clamp, because a clamp would report success for a build the requester did not get. On GCP this bound is additionally constrained by zone capacity at pre-flight, which is also not retryable. See docs/architecture/failure-and-retry.md section 2.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "change_reference": {
+      "description": "The change record number backing an approved production change. Required when environment is PROD; that is the only conditional in this schema. The platform checks it is non-empty and may re-verify it, but approval authority itself is not duplicated inside the platform. See AD-17."
+    },
+
+    "project": false,
+    "region_name": false,
+    "zone": false,
+    "availability_zone": false,
+    "machine_type": false,
+    "instance_name": false,
+    "hostname": false,
+    "short_name": false,
+    "fqdn": false,
+    "subnet": false,
+    "subnet_id": false,
+    "network": false,
+    "network_tags": false,
+    "service_account": false,
+    "external_ip": false,
+    "image_id": false,
+    "image_reference": false,
+    "image_family": false,
+    "latest": false,
+    "disk_type": false,
+    "disk_size": false,
+    "labels": false,
+    "annotations": false,
+    "metadata": false,
+    "shielded_vm": false,
+    "confidential_computing": false,
+    "guest_os_features": false,
+    "vm_size": false,
+    "vpc_id": false,
+    "vnet_id": false,
+    "security_group": false,
+    "security_group_ids": false,
+    "dns_server": false,
+    "domain_controller": false,
+    "ou": false,
+    "domain_ou": false,
+    "monitoring_config": false,
+    "backup_config": false,
+    "agent_config": false,
+    "credentials": false,
+    "cloud_credentials": false,
+    "service_account_key": false,
+    "access_token": false,
+    "account": false,
+    "subscription": false,
+    "resource_group": false,
+    "tags": false,
+    "naming": false,
+    "extra_vars": false,
+    "commands": false,
+    "playbook": false,
+    "script": false,
+    "run_context": false,
+    "context": false,
+    "resolved_config": false,
+    "overrides": false
+  },
+
+  "allOf": [
+    {
+      "description": "change_reference is mandatory in PROD. A schema-level control rather than a runtime check: a PROD request without a change record cannot be constructed at all, so it cannot be submitted, retried into existence, or produced by an automated caller that guessed. See AD-17.",
+      "if": {
+        "properties": { "environment": { "const": "PROD" } },
+        "required": ["environment"]
+      },
+      "then": {
+        "required": ["change_reference"],
+        "properties": {
+          "change_reference": {
+            "description": "Change record number, e.g. CHG0012345. Required in PROD and permitted elsewhere, where it is retained for correlation with a change record that may be attached later.",
+            "type": "string",
+            "pattern": "^[A-Z]{2,8}[0-9]{6,12}$"
+          }
+        }
+      }
+    }
+  ]
+}

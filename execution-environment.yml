@@ -1,0 +1,77 @@
+---
+# Execution Environment definition.
+#
+# Phase 1: structure only. Not built until Phase 4.
+#
+# The EE is what makes GitHub Actions and AAP behave identically. It is built
+# once, promoted by digest, and the SAME digest runs nonprod and prod, so a
+# production build cannot behave differently from the one that was tested.
+#
+# See docs/architecture/execution-environment.md.
+
+version: 3
+
+images:
+  base_image:
+    name: quay.io/ansible/awx-ee:latest
+    # Pin the base image in a release branch, not on main. Pinning on main
+    # would make every merge rebuild the EE and invalidate the digest that
+    # nonprod has been tested against.
+  ansible_core_requires: ">=2.16.14,<2.17.0"
+
+dependencies:
+  galaxy:
+    # Fully pinned, with the same versions as requirements.yml. Two lists that
+    # can disagree is how dev and prod diverge.
+    collections:
+      - name: ansible.builtin
+        version: "2.16.14"
+      - name: ansible.posix
+        version: "1.5.4"
+      - name: ansible.netcommon
+        version: "6.1.0"
+      - name: community.crypto
+        version: "2.22.0"
+      - name: ansible.windows
+        version: "2.3.0"
+      - name: community.dns
+        version: "2.7.0"
+      - name: azure.azcollection
+        version: "2.5.0"
+      - name: amazon.aws
+        version: "8.2.0"
+      - name: google.cloud
+        version: "2.3.0"
+      - name: community.general
+        version: "8.6.0"
+
+  python:
+    # Hashed and pinned in execution-environment/requirements.txt. The
+    # constraints file carries the version ceilings.
+    requirements_file: execution-environment/requirements.txt
+    constraints_file: execution-environment/requirements-constraints.txt
+
+  system:
+    # Deliberately minimal. Every system package is more code running with the
+    # platform's identity, and the platform only ever talks to cloud APIs, a
+    # ServiceNow instance, an AD DC, and DNS.
+    package_manager_path: /usr/bin/microdnf
+    packages:
+      - python3-pip
+      - openssl
+      - krb5-libs
+      - krb5-workstation
+      - libxml2
+      - libxslt
+      - unzip
+      - jq
+    exclude:
+      # Not needed by the automation, and each is a package that would be
+      # scanned, patched, and audited for no benefit.
+      - nano
+      - vim
+      - man-db
+      - telnet
+      - ftp
+      - httpd
+      - cups

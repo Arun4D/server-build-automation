@@ -1,0 +1,46 @@
+# Python packages inside the Execution Environment.
+#
+# PHASE 1 PLACEHOLDER. These versions are the design's intent, not a resolved
+# lock file. Phase 4 replaces this with a fully hash-pinned lock produced by
+# pip-compile, because an EE built from floating versions is not reproducible,
+# and a non-reproducible EE is a non-reproducible production build.
+#
+# The EE is what makes GitHub Actions and AAP behave identically. It is built
+# once and promoted by digest; the same digest runs nonprod and prod.
+
+# --- cloud SDKs -----------------------------------------------------------
+# One per provider. Each is large, and each is a supply-chain surface, so
+# pinning matters more here than anywhere else in the project.
+azure-identity==1.17.1
+azure-mgmt-compute==33.0.0
+azure-mgmt-network==24.0.0
+azure-mgmt-resource==23.0.0
+boto3==1.34.144
+botocore==1.34.144
+google-cloud-compute==1.19.3
+google-auth==2.32.0
+
+# --- ServiceNow -----------------------------------------------------------
+# The adapter uses requests directly against the Table API rather than a
+# ServiceNow SDK: the API surface is small and a full SDK would add a large
+# dependency for four endpoints.
+requests==2.32.3
+PySocks==1.7.1
+
+# --- resolution and state -------------------------------------------------
+jsonschema==4.22.0
+PyYAML==6.0.1
+Jinja2==3.1.4
+boto3-stubs[smartcard]==1.35.76
+mypy-boto3-s3==1.35.76
+
+# --- run state ------------------------------------------------------------
+# The run-state client speaks a narrow interface (read, CAS write, list,
+# delete) and is implemented per backend. boto3 is present so the S3 backend
+# works; the Azure and GCS backends use their own SDKs above.
+google-cloud-storage==2.18.2
+azure-storage-blob==12.22.0
+
+# --- utilities ------------------------------------------------------------
+python-dateutil==2.9.0
+cryptography==42.0.8
