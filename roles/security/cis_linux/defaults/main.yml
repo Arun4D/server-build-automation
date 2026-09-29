@@ -1,0 +1,20 @@
+---
+# Defaults for roles/security/cis_linux
+
+sba_cis_disabled_filesystems:
+  - cramfs
+  - freevxfs
+  - jffs2
+  - hfs
+  - hfsplus
+  - udf
+
+sba_cis_sshd_config:
+  PermitRootLogin: "no"
+  ClientAliveInterval: "300"
+  ClientAliveCountMax: "2"
+  MaxAuthTries: "4"
+  IgnoreRhosts: "yes"
+  HostbasedAuthentication: "no"
+  PermitEmptyPasswords: "no"
+  X11Forwarding: "no"

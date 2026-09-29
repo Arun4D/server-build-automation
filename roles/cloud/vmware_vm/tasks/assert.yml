@@ -1,0 +1,10 @@
+---
+# F — Assert VMware VM
+- name: Assert VMware VM exists and has private IP
+  ansible.builtin.assert:
+    that:
+      - sba_facts.server.instance_id | length > 0
+      - sba_facts.network.private_ip | length > 0
+    fail_msg: "VMware VM postcondition failed: missing instance_id or private_ip."
+    quiet: true
+  tags: [vmware_vm, assert]

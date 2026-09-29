@@ -1,0 +1,14 @@
+---
+# C — Converge and D — Wait for Azure VM
+- name: Wait for Azure VM provisioning state to succeed
+  azure.azcollection.azure_rm_virtualmachine_info:
+    resource_group: "{{ sba_resource_group }}"
+    name: "{{ sba_name }}"
+  register: sba_wait_azure
+  until: >-
+    sba_wait_azure.vms | default([]) | length > 0
+    and sba_wait_azure.vms[0].provisioning_state == 'Succeeded'
+  retries: 30
+  delay: 10
+  changed_when: false
+  tags: [azure_vm, wait]

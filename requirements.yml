@@ -12,10 +12,14 @@
 
 collections:
   # --- core ---------------------------------------------------------------
-  # Pinned explicitly so the EE build is reproducible even for the bundled
-  # collection.
-  - name: ansible.builtin
-    version: "2.16.14"
+  # ansible.builtin is deliberately ABSENT. It is not an independently
+  # installable collection: it is versioned with ansible-core and ships inside
+  # it, and Galaxy publishes zero releases under ansible/builtin. Pinning it
+  # here makes `ansible-galaxy collection install -r requirements.yml` fail
+  # outright, with an error about the dependency map rather than about the
+  # thing you got wrong. The ansible-core version is pinned where it belongs,
+  # in the execution environment definition, because that is what actually
+  # determines the bundled collection's version.
 
   # --- platform, DNS, crypto ----------------------------------------------
   - name: ansible.posix
@@ -41,7 +45,7 @@ collections:
   - name: amazon.aws
     version: "8.2.0"
   - name: google.cloud
-    version: "2.3.0"
+    version: "1.14.0"
 
   # --- general ------------------------------------------------------------
   - name: community.general

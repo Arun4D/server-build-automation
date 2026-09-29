@@ -1,0 +1,117 @@
+---
+# Refusal cases for the GCP provider role.
+#
+# Kept in their own file because they are the most important tests in the
+# suite and the easiest to let rot: a refusal case that stops matching its own
+# message fails loudly, which is what we want, and a refusal case that is
+# deleted is how a role quietly stops refusing things.
+#
+# Each case overrides exactly one field from sba_baseline_resolved, so a failure
+# can only be attributed to that field. The `expect` substring is checked as
+# well as the failure itself, so a case cannot pass on an unrelated error: the
+# role's messages are written to name the rule that was broken and the
+# consequence of breaking it, and this asserts both are present.
+
+# Loaded with include_vars, so the root must be a mapping.
+sba_refusal_cases:
+      # A2. The instance name is the guest hostname as well as the API name,
+      # so an invalid one is a DNS defect too.
+      - name: uppercase instance name
+        run_context:
+          instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+          name: PYPA001
+          fqdn: pypa001.eu.example.com
+        resolved: "{{ sba_baseline_resolved }}"
+        expect: not a valid Compute Engine name
+
+      # A4. The one metadata key the role does not supply on the caller's
+      # behalf. Without it, per-run least privilege has nothing to bind to and
+      # the destroy lookup finds nothing.
+      - name: label set with no ownership label
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'labels': {
+                  'sba_application': 'payments',
+                  'sba_environment': 'prod',
+                  'sba_managed_by': 'sba' }}) }}
+        expect: cannot manage or safely destroy
+
+      # A5. The API would reject this as a 400 invalidLabels at create time,
+      # which reads as though the create itself were wrong.
+      - name: uppercase label value
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'labels': sba_baseline_resolved.labels
+                | combine({'sba_application': 'PAYMENTS'})}) }}
+        expect: not a valid GCP label
+
+      # A5. A dot is legal in a GCP label *value* only if it matches the
+      # pattern; a value that looks like a hostname does not, because the
+      # character set is [a-z0-9_-] with no separator.
+      - name: label value containing a dot
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'labels': sba_baseline_resolved.labels
+                | combine({'sba_application': 'pay.emea'})}) }}
+        expect: not a valid GCP label
+
+      # The image role. Syntactically valid, so no API call will ever reject it.
+      - name: family image reference
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'image': sba_baseline_resolved.image
+                | combine({'image': 'ubuntu-2204-lts-gold'})}) }}
+        expect: moving reference
+
+      # The image role again, for the literal.
+      - name: latest image reference
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'image': sba_baseline_resolved.image
+                | combine({'image': 'latest'})}) }}
+        expect: moving reference
+
+      # A9. A region does not have every zone, so a catalogue entry naming a
+      # zone that does not exist is a resolution error, not a retry.
+      - name: zone absent from the project
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: "{{ sba_baseline_resolved | combine({'zone': 'europe-west9-b'}) }}"
+        expect: ZONE_NOT_AVAILABLE
+
+      # A3. The platform must not present a GCP zone as a resilience control.
+      - name: zone semantics claiming isolation
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: "{{ sba_baseline_resolved | combine({'zone_semantics': 'isolated_failure_domain'}) }}"
+        expect: deployment locality
+
+      # AD-08. A dispatch that silently does nothing for an unrecognised value
+      # is a stage that passes without running.
+      - name: operation outside the closed set
+        operation: rebuild
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: "{{ sba_baseline_resolved }}"
+        expect: closed
+
+      # A6. A service account is attached at create and cannot be attached later
+      # without stopping the instance, so a malformed one must not reach create.
+      - name: malformed service account address
+        run_context: "{{ sba_baseline_run_context }}"
+        resolved: >-
+          {{ sba_baseline_resolved
+             | combine({'service_account_email': 'not-an-address'}) }}
+        expect: not a valid address
+
+      # A1. A role that creates with a missing coordinate produces a resource in
+      # an unpredictable place.
+      - name: empty instance name
+        run_context:
+          instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+          name: ""
+          fqdn: pypa001.eu.example.com
+        resolved: "{{ sba_baseline_resolved }}"
+        expect: platform contract is incomplete

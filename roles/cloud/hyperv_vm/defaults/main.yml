@@ -1,0 +1,20 @@
+---
+# Defaults for roles/cloud/hyperv_vm
+
+sba_run_context: {}
+sba_resolved: {}
+
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+sba_hyperv_host: "{{ sba_resolved.hyperv_host | default('hv-host01.corp.example.com') }}"
+sba_switch_name: "{{ sba_resolved.switch_name | default('vSwitch-Default') }}"
+sba_vhd_path: "{{ sba_resolved.vhd_path | default('C:\\ClusterStorage\\Volume1\\VirtualHardDisks') }}"
+sba_generation: "{{ sba_resolved.generation | default(2) | int }}"
+
+sba_processor_count: "{{ sba_resolved.processor_count | default(4) | int }}"
+sba_memory_startup_bytes: "{{ sba_resolved.memory_startup_bytes | default(8589934592) | int }}"
+sba_source_vhd: "{{ sba_resolved.image.source_vhd | default('') }}"
+
+sba_operation: provision

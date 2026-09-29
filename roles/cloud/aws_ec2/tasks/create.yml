@@ -1,0 +1,31 @@
+---
+# B — Create or Adopt AWS EC2 Instance
+- name: B1 — Resolve AMI
+  ansible.builtin.include_role:
+    name: image/aws_image
+  vars:
+    sba_catalog_image: "{{ sba_resolved.image }}"
+  tags: [aws_ec2, image]
+
+- name: B2 — Provision EC2 Instance
+  amazon.aws.ec2_instance:
+    region: "{{ sba_region }}"
+    name: "{{ sba_name }}"
+    image_id: "{{ sba_image_reference }}"
+    instance_type: "{{ sba_instance_type }}"
+    vpc_subnet_id: "{{ sba_subnet_id }}"
+    network:
+      assign_public_ip: false
+    volumes:
+      - device_name: /dev/sda1
+        ebs:
+          volume_size: "{{ sba_root_volume_size_gb }}"
+          volume_type: "{{ sba_root_volume_type }}"
+          delete_on_termination: true
+          encrypted: true
+    tags: "{{ sba_tags | combine({'sba_instance_id': sba_instance_id, 'Name': sba_name}) }}"
+    wait: true
+    state: running
+  register: sba_aws_create
+  when: not sba_instance_exists | bool
+  tags: [aws_ec2, create]

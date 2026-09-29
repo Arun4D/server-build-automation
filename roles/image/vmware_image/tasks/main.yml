@@ -1,0 +1,16 @@
+---
+# Tasks for roles/image/vmware_image
+- name: Fail when the catalogue entry is missing
+  ansible.builtin.fail:
+    msg: "sba_catalog_image is empty. The template comes from the reviewed catalogue."
+  when: sba_catalog_image | length == 0
+
+- name: Fail when the catalogue entry names no template
+  ansible.builtin.fail:
+    msg: "Catalogue entry has no template_name. An entry must pin an exact template."
+  when: sba_template_name | length == 0
+
+- name: Export verified image fact
+  ansible.builtin.set_fact:
+    sba_image_reference: "{{ sba_template_name }}"
+    sba_image_verified: true

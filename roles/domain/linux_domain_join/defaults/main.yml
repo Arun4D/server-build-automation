@@ -1,0 +1,29 @@
+---
+# Defaults for roles/domain/linux_domain_join
+
+sba_ad_domain: "{{ sba_resolved.domain.name | default('corp.example.com') }}"
+sba_ad_ou: "{{ sba_resolved.domain.ou | default('OU=Servers,OU=Computers,DC=corp,DC=example,DC=com') }}"
+sba_ad_join_user: "{{ sba_resolved.domain.join_user | default('svc_ansible_join') }}"
+sba_ad_join_password: "{{ lookup('ansible.builtin.env', 'SBA_AD_JOIN_PASSWORD', default='placeholder_join_password') }}"
+sba_ad_use_fqdn_names: false
+sba_ad_allowed_groups:
+  - "Domain Admins"
+  - "Enterprise Ops"
+
+sba_ad_packages:
+  RedHat:
+    - realmd
+    - sssd
+    - sssd-tools
+    - adcli
+    - krb5-workstation
+    - samba-common-tools
+    - oddjob
+    - oddjob-mkhomedir
+  Debian:
+    - realmd
+    - sssd
+    - sssd-tools
+    - adcli
+    - krb5-user
+    - packagekit

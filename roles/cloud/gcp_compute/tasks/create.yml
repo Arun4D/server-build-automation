@@ -1,0 +1,197 @@
+---
+# B — Create or adopt.
+#
+# The GCP-specific shape of this group is set by the AD-11 asymmetry: labels
+# are written in the create call, annotations immediately after, and the label
+# is read back and proven. Every other provider applies all of its metadata in
+# the create call. GCP cannot, because a label cannot be added or changed
+# without stopping the instance, and an instance that exists without its
+# ownership label is one the platform's IAM conditions cannot bind to.
+
+# The catalogue entry is resolved.image: the resolver has already merged the
+# catalogue record with the request, so the image role reads a single object
+# rather than re-reading the catalogue itself. Set as a fact rather than a task
+# var because a role default in the included role would otherwise shadow the
+# caller's value, and the entry would silently arrive empty.
+- name: B1 — Hand the catalogue entry to the image role
+  ansible.builtin.set_fact:
+    sba_catalog_image: "{{ sba_resolved.image }}"
+
+- name: B1b — Resolve the pinned image to a self link
+  ansible.builtin.include_role:
+    name: image/gcp_image
+  tags: [gcp_compute, image]
+
+- name: B2 — Fail when the image did not resolve
+  ansible.builtin.fail:
+    msg: >-
+      The image did not resolve to a self link. A create without a verified
+      pinned image would be a create from whatever the API defaults to, and the
+      run record would then describe an image nobody chose.
+  when: not sba_image_verified | bool
+  tags: [gcp_compute, image]
+
+# verify_immutable runs only on the adopt path. These four attributes cannot be
+# changed on a live instance, and on GCP a zone change additionally invalidates
+# the placement of a regional disk. Adopting an instance that differs on any of
+# them means the recorded state would describe a machine that does not exist.
+- name: B3 — Verify the adoptable instance is the one that was resolved
+  when: sba_instance_exists | bool
+  block:
+    - name: B3a — Assert the adoptable instance is in the resolved zone
+      ansible.builtin.assert:
+        that:
+          # The API returns a fully-qualified zone URL, the contract carries a
+          # short name. Comparing them as strings would fail on every adopt
+          # and train an operator to ignore IMMUTABLE_MISMATCH, which is the
+          # one error here that must never be ignored.
+          - sba_existing.zone | default('') | basename == sba_zone
+        fail_msg: >-
+          Instance {{ sba_existing.name }} is in zone
+          {{ sba_existing.zone }}, but this run resolved to {{ sba_zone }}. A
+          zone cannot be changed, and a zone change would invalidate the
+          placement of a regional disk. Code: IMMUTABLE_MISMATCH. Not
+          retryable, and not something to converge.
+        quiet: true
+      tags: [gcp_compute, adopt]
+
+    - name: B3b — Assert the adoptable instance runs the resolved machine type
+      ansible.builtin.assert:
+        that:
+          # Compared on the final path segment, not as strings. The API returns
+          # a fully-qualified machineType URL and the contract carries a short
+          # or zone-qualified name; the same reasoning as B3a applies, and a
+          # mismatch that fires on every healthy adopt is worse than no check.
+          - sba_existing.machineType | default('') | basename == sba_machine_type_qualified | basename
+        fail_msg: >-
+          Instance {{ sba_existing.name }} is {{ sba_existing.machineType }},
+          but this run resolved to {{ sba_machine_type_qualified }}. A machine
+          type change usually stops the instance and is refused in some
+          families, so the platform treats it as a change requiring a new
+          request rather than a converge. Code: IMMUTABLE_MISMATCH.
+        quiet: true
+      tags: [gcp_compute, adopt]
+
+    - name: B3c — Assert the adoptable instance runs the pinned image
+      ansible.builtin.assert:
+        that:
+          - sba_existing.disks | selectattr('boot', 'defined') | map(attribute='source') | first | default('') == sba_image_self_link
+        fail_msg: >-
+          Instance {{ sba_existing.name }} was created from
+          {{ sba_existing.disks | selectattr('boot', 'defined') | map(attribute='source') | first | default('unknown') }},
+          but this run resolved to {{ sba_image_self_link }}. Changing the boot
+          image means rebuilding the instance. Code: IMMUTABLE_MISMATCH.
+          Recorded as OS_VERSION_MISMATCH when the two images differ in a way
+          that matters to the OS baseline.
+        quiet: true
+      tags: [gcp_compute, adopt]
+
+    - name: B3d — Assert the adoptable instance is on the resolved subnet
+      ansible.builtin.assert:
+        that:
+          # The API returns the subnetwork as a self link; the contract carries
+          # it as a project/region/subnetworks/name path. Compare the last
+          # segment, which is the part that identifies the subnet, for the same
+          # reason as B3a and B3b.
+          - sba_existing.networkInterfaces | map(attribute='subnetwork') | first | default('') | basename
+            == sba_subnet | basename
+        fail_msg: >-
+          Instance {{ sba_existing.name }} is on subnet
+          {{ sba_existing.networkInterfaces | map(attribute='subnetwork') | first | default('unknown') }},
+          but this run resolved to {{ sba_subnet }}. A network interface cannot
+          be added or moved without stopping the instance. Code:
+          IMMUTABLE_MISMATCH.
+        quiet: true
+      tags: [gcp_compute, adopt]
+
+# Adoption is a no-op on the immutable attributes by construction, because the
+# asserts above just proved they match. The instance is not "updated towards"
+# the spec; it is recognised as already being the spec.
+- name: B4 — Record that the existing instance is adopted, not created
+  ansible.builtin.set_fact:
+    sba_adopted: true
+  when: sba_instance_exists | bool
+  tags: [gcp_compute, adopt]
+
+- name: B5 — Create the instance with the label set applied atomically
+  when: not sba_instance_exists | bool
+  block:
+    - name: B5a — Create
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ sba_project }}"
+        zone: "{{ sba_zone }}"
+        machine_type: "{{ sba_machine_type_qualified }}"
+        can_ip_forward: false
+        # No access_configs, so no external IP. This is the default and the only
+        # behaviour, unless sba_allow_external_ip is set with a justification in
+        # defaults/main.yml, which is a reviewed code change rather than a
+        # run-time decision.
+        network_interfaces:
+          - network: "{{ sba_network }}"
+            subnetwork: "{{ sba_subnet }}"
+            access_configs: >-
+              {{ [{ 'nat_ip': 'none' }] if sba_allow_external_ip | bool
+                 else [] }}
+        disks:
+          - source: "{{ sba_image_self_link }}"
+            boot: true
+            auto_delete: true
+            disk_encryption_key: >-
+              {{ { 'raw_key': sba_cmek_key } if sba_cmek_key | length > 0
+                 else omit }}
+        # Labels in the create call. This is the point at which they must
+        # exist: per-run least privilege binds an IAM condition to
+        # resource.labels.sba_instance_id, and the condition cannot be written
+        # meaningfully for an instance that has no label yet.
+        labels: "{{ sba_labels }}"
+        metadata: "{{ sba_instance_metadata | combine({'items': sba_metadata_items}) }}"
+        service_accounts:
+          - email: "{{ sba_service_account_email }}"
+            scopes: "{{ sba_scopes }}"
+        # Secure Boot and vTPM, per catalogue entry. Not global, because not
+        # every machine type supports both.
+        shielded_instance_config:
+          enable_secure_boot: "{{ sba_shielded_vm | bool }}"
+          enable_vtpm: "{{ sba_shielded_vm | bool }}"
+        # destroy must be able to remove this. A run that cannot clean up after
+        # a partial failure leaves resources carrying its labels untracked.
+        deletion_protection: "{{ sba_deletion_protection }}"
+        state: present
+      register: sba_create_result
+      no_log: true
+      retries: "{{ sba_retry_attempts }}"
+      delay: "{{ sba_retry_delay }}"
+      # 429 RESOURCE_EXHAUSTED is the rate limit and is retryable; 429
+      # RATE_LIMIT_EXCEEDED on CPU quota is a quota problem and is not, and
+      # they share a status code. Retrying the quota case wastes three attempts
+      # and delays a failure the operator needs to see now.
+      until: >-
+        sba_create_result is succeeded
+        or ('RESOURCE_EXHAUSTED' in (sba_create_result.msg | default(''))
+            and 'RATE_LIMIT_EXCEEDED' not in (sba_create_result.msg | default('')))
+      tags: [gcp_compute, create]
+
+    - name: B5b — Apply the annotations after create
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ sba_project }}"
+        zone: "{{ sba_zone }}"
+        annotations: "{{ sba_annotations }}"
+        state: present
+      register: sba_annotate_result
+      no_log: true
+      # Immediately after create, so this is a second API call on a resource
+      # that is seconds old. Rate limiting here is transient, unlike a quota
+      # error, so it is retried.
+      retries: "{{ sba_retry_attempts }}"
+      delay: "{{ sba_retry_delay }}"
+      until: >-
+        sba_annotate_result is succeeded
+        or 'RESOURCE_EXHAUSTED' in (sba_annotate_result.msg | default(''))
+      tags: [gcp_compute, create]
+
+    - name: B5c — Record that this run created the instance
+      ansible.builtin.set_fact:
+        sba_adopted: false
+      tags: [gcp_compute, create]

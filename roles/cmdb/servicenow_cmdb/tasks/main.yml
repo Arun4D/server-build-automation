@@ -1,0 +1,47 @@
+---
+# Tasks for roles/cmdb/servicenow_cmdb
+# Upserts Configuration Item record in ServiceNow CMDB
+
+- name: Register / Update Linux Server in ServiceNow CMDB
+  when: sba_snow_enabled | bool
+  delegate_to: localhost
+  become: false
+  block:
+    - name: Call ServiceNow Table API to upsert CI record
+      ansible.builtin.uri:
+        url: "https://{{ sba_snow_instance }}/api/now/table/{{ sba_snow_table }}"
+        method: POST
+        user: "{{ sba_snow_username }}"
+        password: "{{ sba_snow_password }}"
+        force_basic_auth: true
+        status_code: [200, 201]
+        headers:
+          Content-Type: "application/json"
+          Accept: "application/json"
+        body_format: json
+        body:
+          name: "{{ sba_run_context.name | default(inventory_hostname) }}"
+          fqdn: "{{ sba_run_context.fqdn | default(inventory_hostname) }}"
+          ip_address: "{{ sba_facts.network.private_ip | default(ansible_default_ipv4.address | default('')) }}"
+          os: "{{ ansible_distribution | default('Linux') }}"
+          os_version: "{{ ansible_distribution_version | default('') }}"
+          operational_status: "1"  # Operational
+          install_status: "1"      # Installed
+          comments: "Provisioned via SBA Multi-Cloud Automation Platform"
+          correlation_id: "{{ sba_run_context.correlation_id | default(sba_instance_id | default('')) }}"
+      register: sba_snow_response
+      no_log: true
+      tags: [cmdb, snow]
+
+    - name: Record ServiceNow SysID into facts
+      ansible.builtin.set_fact:
+        sba_cmdb_ci_sys_id: "{{ sba_snow_response.json.result.sys_id | default('') }}"
+      tags: [cmdb, snow]
+
+  rescue:
+    - name: Warn on ServiceNow CMDB update failure without aborting build
+      ansible.builtin.debug:
+        msg: >-
+          ServiceNow CMDB registration failed for {{ inventory_hostname }}.
+          Provisioned VM remains intact. Manual reconciliation may be required.
+      tags: [cmdb, snow]

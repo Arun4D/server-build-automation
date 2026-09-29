@@ -1,0 +1,75 @@
+---
+# Linux Golden Images Catalogue
+# Approved, pinned golden images across all cloud and virtualization providers.
+# Images are pinned by exact version/build ID, template name, or immutable self links.
+
+linux_images:
+  rhel_9:
+    os_family: RedHat
+    os_version: "9.4"
+    architecture: x86_64
+    gcp:
+      catalog_id: rhel-9-gold-latest
+      project: sbagoldimages
+      image: rhel-9-gold-v20260901
+      self_link: "https://www.googleapis.com/compute/v1/projects/sbagoldimages/global/images/rhel-9-gold-v20260901"
+      build_date: "2026-09-01"
+      guest_os_features: [UEFI_COMPATIBLE, VIRTIO_SCSI_MULTIQUEUE]
+    azure:
+      catalog_id: rhel-9-gold-azure
+      publisher: RedHat
+      offer: RHEL
+      sku: "9-lvm-gen2"
+      version: "9.4.2026090101"
+    aws:
+      catalog_id: rhel-9-gold-aws
+      ami_id: ami-0123456789abcdef0
+      owner_id: "309956199498"
+      build_date: "2026-09-01"
+    vmware:
+      catalog_id: rhel-9-gold-vmware
+      template_name: "tmpl-rhel9-gold-v20260901"
+      folder: "Templates/Linux"
+    hyperv:
+      catalog_id: rhel-9-gold-hyperv
+      source_vhd: "C:\\ClusterStorage\\Templates\\rhel-9-gold-v20260901.vhdx"
+      generation: 2
+    nutanix:
+      catalog_id: rhel-9-gold-nutanix
+      image_name: "rhel-9-gold-v20260901"
+      image_type: "DISK_IMAGE"
+
+  ubuntu_2204:
+    os_family: Debian
+    os_version: "22.04"
+    architecture: x86_64
+    gcp:
+      catalog_id: ubuntu-2204-gold-latest
+      project: sbagoldimages
+      image: ubuntu-2204-lts-gold-v20260901
+      self_link: "https://www.googleapis.com/compute/v1/projects/sbagoldimages/global/images/ubuntu-2204-lts-gold-v20260901"
+      build_date: "2026-09-01"
+      guest_os_features: [UEFI_COMPATIBLE, VIRTIO_SCSI_MULTIQUEUE]
+    azure:
+      catalog_id: ubuntu-2204-gold-azure
+      publisher: Canonical
+      offer: 0001-com-ubuntu-server-jammy
+      sku: "22_04-lts-gen2"
+      version: "22.04.202609010"
+    aws:
+      catalog_id: ubuntu-2204-gold-aws
+      ami_id: ami-0987654321fedcba0
+      owner_id: "099720109477"
+      build_date: "2026-09-01"
+    vmware:
+      catalog_id: ubuntu-2204-gold-vmware
+      template_name: "tmpl-ubuntu2204-gold-v20260901"
+      folder: "Templates/Linux"
+    hyperv:
+      catalog_id: ubuntu-2204-gold-hyperv
+      source_vhd: "C:\\ClusterStorage\\Templates\\ubuntu-2204-gold-v20260901.vhdx"
+      generation: 2
+    nutanix:
+      catalog_id: ubuntu-2204-gold-nutanix
+      image_name: "ubuntu-2204-gold-v20260901"
+      image_type: "DISK_IMAGE"

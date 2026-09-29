@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  author: SBA Platform Team
+  description: Enterprise Active Directory domain join for Linux servers using realmd and SSSD
+  company: Internal
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions: ["8", "9"]
+    - name: Ubuntu
+      versions: ["20.04", "22.04"]
+dependencies: []

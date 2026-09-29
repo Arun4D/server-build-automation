@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: SBA Platform Team
+  description: ServiceNow CMDB Configuration Item registration for provisioned Linux servers
+  company: Internal
+  license: proprietary
+  min_ansible_version: "2.15"
+dependencies: []

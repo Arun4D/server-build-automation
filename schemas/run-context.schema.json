@@ -79,14 +79,14 @@
           "enum": ["DEV", "NONPROD", "PROD"]
         },
         "provider": {
-          "description": "Lower-case provider key, matching sba_provider_capabilities.name in configuration/clouds/gcp.yml. Lower case because this is the key the TagMapper and the capability declaration are indexed by, and it is not the value the contract carries.",
+          "description": "Lower-case provider key, matching sba_provider_capabilities.name in configuration/clouds/<provider>.yml.",
           "type": "string",
-          "const": "gcp"
+          "enum": ["gcp", "azure", "aws", "vmware", "hyperv", "nutanix"]
         },
         "cloud": {
           "description": "Upper-case provider name as it arrived in the contract, retained for correlation with the request and the result artifacts.",
           "type": "string",
-          "const": "GCP"
+          "enum": ["GCP", "AZURE", "AWS", "VMWARE", "HYPERV", "NUTANIX"]
         },
         "region": {
           "description": "Business region code, echoed from the contract. Retained so an operator reading the context does not have to open the request to know which footprint was requested.",
@@ -306,9 +306,9 @@
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
         "provider": {
-          "description": "Provider that owns the image. Always gcp in this release.",
+          "description": "Provider that owns the image.",
           "type": "string",
-          "const": "gcp"
+          "enum": ["gcp", "azure", "aws", "vmware", "hyperv", "nutanix"]
         },
         "project": {
           "description": "Project that owns the image, distinct from the target project. The build identity needs roles/imageReader on this project, which is a narrower grant than on the target project and is the reason it is named separately.",

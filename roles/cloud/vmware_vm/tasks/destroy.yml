@@ -1,0 +1,13 @@
+---
+# E — Decommission VMware VM
+- name: Power off and delete VMware VM
+  community.vmware.vmware_guest:
+    hostname: "{{ sba_vcenter_hostname }}"
+    username: "{{ sba_vcenter_username }}"
+    password: "{{ sba_vcenter_password }}"
+    validate_certs: false
+    datacenter: "{{ sba_datacenter }}"
+    name: "{{ sba_name }}"
+    state: absent
+    force: true
+  tags: [vmware_vm, destroy]

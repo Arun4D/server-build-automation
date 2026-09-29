@@ -1,0 +1,23 @@
+---
+# Defaults for roles/cloud/nutanix_vm
+
+sba_run_context: {}
+sba_resolved: {}
+
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+sba_nutanix_host: "{{ lookup('ansible.builtin.env', 'NUTANIX_HOST', default='prism.corp.example.com') }}"
+sba_nutanix_username: "{{ lookup('ansible.builtin.env', 'NUTANIX_USER', default='admin') }}"
+sba_nutanix_password: "{{ lookup('ansible.builtin.env', 'NUTANIX_PASSWORD', default='placeholder') }}"
+sba_cluster_name: "{{ sba_resolved.cluster_name | default('NTNX-CLUSTER-01') }}"
+sba_subnet_name: "{{ sba_resolved.subnet | default('VLAN-10') }}"
+
+sba_num_vcpus: "{{ sba_resolved.num_vcpus | default(4) | int }}"
+sba_num_cores_per_vcpu: "{{ sba_resolved.num_cores_per_vcpu | default(1) | int }}"
+sba_memory_mb: "{{ sba_resolved.memory_mb | default(8192) | int }}"
+sba_image_name: "{{ sba_resolved.image.image_name | default('') }}"
+sba_disk_size_gb: "{{ sba_resolved.root_volume_size_gb | default(40) | int }}"
+
+sba_operation: provision

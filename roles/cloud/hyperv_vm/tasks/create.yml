@@ -1,0 +1,23 @@
+---
+# B — Create or Adopt Hyper-V VM
+- name: B1 — Resolve template
+  ansible.builtin.include_role:
+    name: image/hyperv_image
+  vars:
+    sba_catalog_image: "{{ sba_resolved.image }}"
+  tags: [hyperv_vm, image]
+
+- name: B2 — Clone VHDX and Create Virtual Machine
+  ansible.windows.win_powershell:
+    script: |
+      $targetVhd = "{{ sba_vhd_path }}\\{{ sba_name }}.vhdx"
+      if (!(Test-Path $targetVhd)) {
+        Copy-Item -Path "{{ sba_image_reference }}" -Destination $targetVhd
+      }
+      New-VM -Name "{{ sba_name }}" -MemoryStartupBytes {{ sba_memory_startup_bytes }} -Generation {{ sba_generation }} -VHDPath $targetVhd -SwitchName "{{ sba_switch_name }}"
+      Set-VMProcessor -VMName "{{ sba_name }}" -Count {{ sba_processor_count }}
+      Start-VM -Name "{{ sba_name }}"
+  delegate_to: "{{ sba_hyperv_host }}"
+  register: sba_hyperv_create
+  when: not sba_instance_exists | bool
+  tags: [hyperv_vm, create]

@@ -1,0 +1,23 @@
+---
+# Defaults for roles/cloud/aws_ec2
+
+sba_run_context: {}
+sba_resolved: {}
+
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+sba_region: "{{ sba_resolved.region | default('eu-west-1') }}"
+sba_instance_type: "{{ sba_resolved.instance_type | default('m5.xlarge') }}"
+sba_subnet_id: "{{ sba_resolved.subnet_id | default('') }}"
+sba_vpc_id: "{{ sba_resolved.vpc_id | default('') }}"
+sba_iam_instance_profile: "{{ sba_resolved.iam_instance_profile | default('') }}"
+sba_key_name: "{{ sba_resolved.key_name | default('') }}"
+
+sba_image_reference: "{{ sba_resolved.image.ami_id | default('') }}"
+sba_root_volume_size_gb: "{{ sba_resolved.root_volume_size_gb | default(30) | int }}"
+sba_root_volume_type: "{{ sba_resolved.root_volume_type | default('gp3') }}"
+
+sba_tags: "{{ sba_resolved.tags | default({}) }}"
+sba_operation: provision

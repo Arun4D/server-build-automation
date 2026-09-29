@@ -1,0 +1,28 @@
+---
+# A — Preflight and Lookup for AWS EC2
+- name: A1 — Assert platform contract coordinates
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_region | length > 0
+      - sba_subnet_id | length > 0
+    fail_msg: "AWS contract missing instance_id, name, region, or subnet_id."
+    quiet: true
+  tags: [aws_ec2, contract]
+
+- name: A2 — Check if EC2 instance already exists by sba_instance_id tag
+  amazon.aws.ec2_instance_info:
+    region: "{{ sba_region }}"
+    filters:
+      "tag:sba_instance_id": "{{ sba_instance_id }}"
+      "instance-state-name": ["pending", "running", "stopping", "stopped"]
+  register: sba_aws_check
+  changed_when: false
+  tags: [aws_ec2, lookup]
+
+- name: A3 — Record instance existence
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ (sba_aws_check.instances | default([]) | length) > 0 }}"
+    sba_existing_aws: "{{ sba_aws_check.instances[0] if (sba_aws_check.instances | default([]) | length) > 0 else {} }}"
+  tags: [aws_ec2, lookup]

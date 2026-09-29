@@ -1,0 +1,91 @@
+---
+# Integration Test: Multi-Cloud Provider Resolution and Linux Build Flow
+# Tests provider matrix lookup, image resolution, inventory injection, and post-build tasks.
+
+- name: Test Provider Matrix and Configuration Resolution
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    matrix_file: "{{ playbook_dir }}/../../configuration/routing/provider_matrix.yml"
+    images_file: "{{ playbook_dir }}/../../configuration/images/linux_images.yml"
+    clouds_gcp_file: "{{ playbook_dir }}/../../configuration/clouds/gcp.yml"
+
+  tasks:
+    - name: Load Provider Matrix
+      ansible.builtin.include_vars:
+        file: "{{ matrix_file }}"
+        name: matrix
+
+    - name: Assert all 4 cloud providers exist in routing matrix
+      ansible.builtin.assert:
+        that:
+          - "'gcp' in matrix.providers"
+          - "'azure' in matrix.providers"
+          - "'aws' in matrix.providers"
+          - "'hybridcloud' in matrix.providers"
+        fail_msg: "Provider matrix is missing one or more required cloud providers."
+
+    - name: Assert GCP provider mappings
+      ansible.builtin.assert:
+        that:
+          - matrix.providers.gcp.provision_role == "cloud/gcp_compute"
+          - matrix.providers.gcp.image_resolver_role == "image/gcp_image"
+          - matrix.providers.gcp.post_build_playbook == "playbooks/post_build/linux_post_build.yml"
+          - "'google.cloud' in matrix.providers.gcp.required_collections"
+
+    - name: Load Linux Images Catalogue
+      ansible.builtin.include_vars:
+        file: "{{ images_file }}"
+        name: catalog
+
+    - name: Assert GCP RHEL 9 and Ubuntu 2204 images are pinned
+      ansible.builtin.assert:
+        that:
+          - catalog.linux_images.rhel_9.gcp.image is defined
+          - catalog.linux_images.rhel_9.gcp.self_link is match('^https://www.googleapis.com/compute/v1/projects/.+')
+          - catalog.linux_images.ubuntu_2204.gcp.image is defined
+          - catalog.linux_images.ubuntu_2204.gcp.self_link is match('^https://www.googleapis.com/compute/v1/projects/.+')
+        fail_msg: "GCP Linux golden image catalogue entries are missing or not properly pinned."
+
+    - name: Test Dynamic Host Injection into In-Memory Inventory (AD-18)
+      ansible.builtin.add_host:
+        name: "test-gcp-linux01.corp.example.com"
+        groups:
+          - target_servers
+          - linux_servers
+          - gcp_servers
+        ansible_host: "10.10.20.15"
+        ansible_user: "{{ matrix.providers.gcp.inventory.default_user }}"
+        ansible_connection: "local"  # Local connection for test simulation
+        sba_run_context:
+          instance_id: "test-uuid-12345"
+          name: "test-gcp-linux01"
+          fqdn: "test-gcp-linux01.corp.example.com"
+          cloud_provider: "gcp"
+          application_code: "payments"
+          environment: "dev"
+        sba_resolved:
+          project: "sba-dev-project-01"
+          zone: "europe-west1-b"
+          domain:
+            name: "corp.example.com"
+            ou: "OU=Servers,DC=corp,DC=example,DC=com"
+            join_user: "svc_join"
+          dns:
+            zone_name: "corp-internal"
+        sba_facts:
+          network:
+            private_ip: "10.10.20.15"
+          server:
+            instance_id: "987654321012345"
+            fqdn: "test-gcp-linux01.corp.example.com"
+
+    - name: Verify injected host in inventory
+      ansible.builtin.assert:
+        that:
+          - "'test-gcp-linux01.corp.example.com' in groups['target_servers']"
+          - "'test-gcp-linux01.corp.example.com' in groups['linux_servers']"
+          - "'test-gcp-linux01.corp.example.com' in groups['gcp_servers']"
+          - hostvars['test-gcp-linux01.corp.example.com'].ansible_host == '10.10.20.15'
+          - hostvars['test-gcp-linux01.corp.example.com'].ansible_user == 'sba'

@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: SBA Platform Team
+  description: Hyper-V VM provisioning role conforming to provider abstraction contract
+  company: Internal
+  license: proprietary
+  min_ansible_version: "2.15"
+dependencies: []

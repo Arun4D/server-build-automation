@@ -1,0 +1,29 @@
+---
+# Defaults for roles/cloud/azure_vm
+
+sba_run_context: {}
+sba_resolved: {}
+
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+sba_subscription_id: "{{ sba_resolved.subscription_id | default('') }}"
+sba_resource_group: "{{ sba_resolved.resource_group | default('') }}"
+sba_location: "{{ sba_resolved.region | default('') }}"
+sba_vm_size: "{{ sba_resolved.vm_size | default('Standard_D4s_v5') }}"
+
+sba_vnet_name: "{{ sba_resolved.vnet_name | default('') }}"
+sba_subnet_name: "{{ sba_resolved.subnet_name | default('') }}"
+sba_allow_external_ip: false
+
+sba_admin_username: "{{ sba_resolved.admin_username | default('azureuser') }}"
+sba_ssh_public_key: "{{ sba_resolved.ssh_public_key | default('') }}"
+
+sba_image_reference: "{{ sba_resolved.image | default({}) }}"
+sba_os_disk_type: "{{ sba_resolved.os_disk_type | default('Premium_LRS') }}"
+sba_os_disk_size_gb: "{{ sba_resolved.os_disk_size_gb | default(30) | int }}"
+sba_data_volumes: "{{ sba_resolved.data_volumes | default([]) }}"
+
+sba_tags: "{{ sba_resolved.tags | default({}) }}"
+sba_operation: provision

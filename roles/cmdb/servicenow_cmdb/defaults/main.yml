@@ -1,0 +1,8 @@
+---
+# Defaults for roles/cmdb/servicenow_cmdb
+
+sba_snow_instance: "{{ lookup('ansible.builtin.env', 'SNOW_INSTANCE', default='dev12345.service-now.com') }}"
+sba_snow_username: "{{ lookup('ansible.builtin.env', 'SNOW_USER', default='admin') }}"
+sba_snow_password: "{{ lookup('ansible.builtin.env', 'SNOW_PASSWORD', default='placeholder') }}"
+sba_snow_table: "cmdb_ci_linux_server"
+sba_snow_enabled: true

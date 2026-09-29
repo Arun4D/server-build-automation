@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: gcp_image
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >-
+    Resolves a catalogue image entry to a Google Compute Engine image self
+    link, and refuses to resolve a family or a moving reference.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - gcp
+    - image
+
+# No dependencies. This role reads one catalogue entry and returns one self
+# link; it does not need the provider role, and depending on it would invert
+# the layering.
+dependencies: []
+
+collections:
+  - google.cloud

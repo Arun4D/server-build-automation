@@ -1,0 +1,56 @@
+---
+# One refusal case: run the role expecting failure, then assert the failure is
+# the right one.
+#
+# Wrapped in a block/rescue rather than using ignore_errors, because
+# ignore_errors does not propagate into a block inside an included role. The
+# role's own dispatch uses block/rescue, so a refusal raised inside it lands in
+# the role's error context, where ignore_errors on the outer task does not
+# reach. Asserting in the rescue is also what makes the test able to distinguish
+# "refused for the right reason" from "failed for an unrelated reason" — an
+# ignore_errors test passes just as happily when a case breaks for the wrong
+# cause, which is the failure mode that lets a broken check look green.
+
+- name: "Refuse: {{ sba_case.name }}"
+  block:
+    - name: Run the role, which is expected to refuse
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: "{{ sba_case.operation | default('provision') }}"
+        sba_run_context: "{{ sba_case.run_context }}"
+        sba_resolved: "{{ sba_case.resolved }}"
+        # Retry and wait budgets collapsed to their floor. The role's defaults
+        # are 3 attempts and a 3600s readiness wait, and a refusal raised
+        # inside a retry loop pays all of it. These tests assert which refusal
+        # fires, not how patiently it waited, so the timings are overridden
+        # rather than the behaviour under test.
+        sba_retry_attempts: 1
+        sba_retry_delay: 0
+        sba_wait_ready_timeout: 5
+
+  rescue:
+    - name: "Assert refusal: {{ sba_case.name }}"
+      ansible.builtin.assert:
+        that:
+          - sba_case.expect in (sba_refusal_message | default(''))
+        fail_msg: >-
+          {{ sba_case.name }}: expected a refusal mentioning
+          "{{ sba_case.expect }}", got
+          {{ sba_refusal_message | default('<no message>') | truncate(400) }}
+        success_msg: "refused: {{ sba_case.name }}"
+      vars:
+        sba_refusal_message: "{{ ansible_failed_result.msg | default('') }}"
+
+  # The case succeeded, which means the role did NOT refuse. This is the branch
+  # that matters most, because a refusal test that only asserts in its rescue
+  # passes vacuously the moment a check stops firing: nothing runs, nothing
+  # fails, and the suite reports green while the role has quietly stopped
+  # refusing things.
+  else:
+    - name: "Fail: {{ sba_case.name }} was expected to be refused"
+      ansible.builtin.fail:
+        msg: >-
+          {{ sba_case.name }}: the role completed successfully. It was
+          expected to refuse this input, so one of its checks has stopped
+          firing.

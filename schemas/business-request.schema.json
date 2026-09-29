@@ -45,7 +45,7 @@
     "cloud": {
       "description": "Cloud provider. Single-valued in this release: GCP only. The field is retained because it is part of the durable contract, and widening it is a minor bump under AD-20 -- an enum addition is additive and a consumer rejects an unknown member with UNSUPPORTED_ENUM_VALUE rather than passing it through. A closed set is the control that stops a buggy or compromised caller injecting a value that reaches a provider module. See docs/architecture/cloud/gcp.md.",
       "type": "string",
-      "enum": ["GCP"]
+      "enum": ["GCP", "AZURE", "AWS", "VMWARE", "HYPERV", "NUTANIX"]
     },
     "region": {
       "description": "Business region code, e.g. EU or US. Resolved to a GCP region such as europe-west1 through configuration/regions/. Must be inside the application's approved footprint. The concrete GCP region, and the zone within it, are deliberately NOT expressible here -- hence region_name and zone are forbidden properties. A zone that does not exist in the target region must fail at resolution, not at apply. See AD-19 and docs/architecture/cloud/gcp.md section 2.",

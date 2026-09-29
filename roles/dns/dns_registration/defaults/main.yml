@@ -1,0 +1,8 @@
+---
+# Defaults for roles/dns/dns_registration
+
+sba_dns_provider: "{{ sba_run_context.cloud_provider | default('gcp') }}"
+sba_dns_server_ip: "{{ sba_facts.network.private_ip | default(ansible_default_ipv4.address | default('')) }}"
+sba_dns_server_fqdn: "{{ sba_run_context.fqdn | default(inventory_hostname) }}"
+sba_dns_managed_zone: "{{ sba_resolved.dns.zone_name | default('internal-zone') }}"
+sba_dns_ttl: 300

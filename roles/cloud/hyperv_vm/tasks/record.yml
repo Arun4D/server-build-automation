@@ -1,0 +1,39 @@
+---
+# B (continued) — Read back Hyper-V observed state and record into sba_facts
+- name: Query VM IP and ID from Hyper-V host
+  ansible.windows.win_powershell:
+    script: |
+      $vm = Get-VM -Name "{{ sba_name }}"
+      $ip = ($vm | Get-VMNetworkAdapter).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+      @{
+        Id = $vm.Id.ToString()
+        State = $vm.State.ToString()
+        IP = $ip
+      } | ConvertTo-Json
+  delegate_to: "{{ sba_hyperv_host }}"
+  register: sba_observed_hyperv_raw
+  changed_when: false
+  tags: [hyperv_vm, record]
+
+- name: Parse observed facts
+  ansible.builtin.set_fact:
+    sba_observed_hyperv: "{{ sba_observed_hyperv_raw.output[0] | from_json }}"
+  tags: [hyperv_vm, record]
+
+- name: Record observed state into sba_facts
+  ansible.builtin.set_fact:
+    sba_facts:
+      server:
+        instance_id: "{{ sba_observed_hyperv.Id | default(sba_instance_id) }}"
+        state: "{{ sba_observed_hyperv.State | default('Running') }}"
+        private_ip: "{{ sba_observed_hyperv.IP | default('') }}"
+        fqdn: "{{ sba_fqdn }}"
+      network:
+        private_ip: "{{ sba_observed_hyperv.IP | default('') }}"
+        switch_name: "{{ sba_switch_name }}"
+      image:
+        applied_image_id: "{{ sba_image_reference }}"
+      tags:
+        applied: { sba_instance_id: "{{ sba_instance_id }}" }
+        verified: true
+  tags: [hyperv_vm, record]

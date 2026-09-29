@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: SBA Platform Team
+  description: Internal DNS registration (A and PTR records)
+  company: Internal
+  license: proprietary
+  min_ansible_version: "2.15"
+dependencies: []

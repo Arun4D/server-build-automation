@@ -1,0 +1,35 @@
+---
+# B — Create or Adopt VMware VM
+- name: B1 — Resolve template
+  ansible.builtin.include_role:
+    name: image/vmware_image
+  vars:
+    sba_catalog_image: "{{ sba_resolved.image }}"
+  tags: [vmware_vm, image]
+
+- name: B2 — Clone Virtual Machine from Template
+  community.vmware.vmware_guest:
+    hostname: "{{ sba_vcenter_hostname }}"
+    username: "{{ sba_vcenter_username }}"
+    password: "{{ sba_vcenter_password }}"
+    validate_certs: false
+    datacenter: "{{ sba_datacenter }}"
+    cluster: "{{ sba_cluster }}"
+    folder: "{{ sba_folder }}"
+    name: "{{ sba_name }}"
+    template: "{{ sba_image_reference }}"
+    datastore: "{{ sba_datastore }}"
+    hardware:
+      num_cpus: "{{ sba_num_cpus }}"
+      memory_mb: "{{ sba_memory_mb }}"
+    networks:
+      - name: "{{ sba_network }}"
+        start_connected: true
+    customvalues:
+      - key: sba_instance_id
+        value: "{{ sba_instance_id }}"
+    state: poweredon
+    wait_for_ip_address: true
+  register: sba_vmware_create
+  when: not sba_instance_exists | bool
+  tags: [vmware_vm, create]

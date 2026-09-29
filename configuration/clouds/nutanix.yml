@@ -1,0 +1,27 @@
+---
+# Nutanix AHV Infrastructure Configuration Catalogue
+provider: nutanix
+name: Nutanix AHV
+
+defaults:
+  cluster_name: "NTNX-CLUSTER-01"
+  root_volume_size_gb: 40
+
+environments:
+  dev:
+    cluster: "NTNX-DEV-01"
+    subnet: "VLAN-DEV-10"
+    storage_container: "default-container-dev"
+  nonprod:
+    cluster: "NTNX-NONPROD-01"
+    subnet: "VLAN-NONPROD-20"
+    storage_container: "default-container-nonprod"
+  prod:
+    cluster: "NTNX-PROD-01"
+    subnet: "VLAN-PROD-30"
+    storage_container: "default-container-prod"
+
+sizing_profiles:
+  standard_small: { num_vcpus: 2, num_cores_per_vcpu: 1, memory_mb: 4096 }
+  standard_medium: { num_vcpus: 4, num_cores_per_vcpu: 1, memory_mb: 8192 }
+  standard_large: { num_vcpus: 8, num_cores_per_vcpu: 1, memory_mb: 16384 }

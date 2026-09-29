@@ -1,0 +1,5 @@
+---
+# Defaults for roles/image/vmware_image
+sba_catalog_image: {}
+sba_template_name: "{{ sba_catalog_image.template_name | default('') }}"
+sba_image_verified: false

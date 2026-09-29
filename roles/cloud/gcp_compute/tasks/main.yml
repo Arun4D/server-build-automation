@@ -1,0 +1,121 @@
+---
+# Entry point. sba_operation selects a fixed task sequence; it is never a
+# dynamic include of a name built from input.
+#
+# AD-08 is a closed dispatch map for exactly this reason. An include_role whose
+# name came from a variable would let a caller name any file in the role
+# directory, which is a path-traversal surface dressed as a convenience. The
+# operations below are literals in a static list and the dispatch is a chain of
+# static imports.
+
+# provision is the full path: validate, resolve, create-or-adopt, prove the
+# metadata landed, converge, wait, then assert the postconditions.
+- name: Provision a GCP instance from a pinned image
+  when: sba_operation == 'provision'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [gcp_compute, provision, preflight, lookup]
+
+    - name: Create or adopt
+      ansible.builtin.import_tasks: create.yml
+      tags: [gcp_compute, provision, create, adopt]
+
+    - name: Read back and record
+      ansible.builtin.import_tasks: record.yml
+      tags: [gcp_compute, provision, record, verify]
+
+    - name: Converge and wait
+      ansible.builtin.import_tasks: converge_wait.yml
+      tags: [gcp_compute, provision, converge, wait]
+
+    - name: Assert postconditions
+      ansible.builtin.import_tasks: assert.yml
+      tags: [gcp_compute, provision, assert]
+
+# get and validate are read-only. They run the same lookups and assertions and
+# create nothing, which is what makes them safe to call from a validation stage
+# that must not touch infrastructure.
+- name: Get or validate a GCP instance without changing it
+  when: sba_operation in ['get', 'validate']
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [gcp_compute, get, validate, preflight, lookup]
+
+    - name: Read the current state
+      google.cloud.gcp_compute_instance_info:
+        project: "{{ sba_project }}"
+        zone: "{{ sba_zone }}"
+        name: "{{ sba_name }}"
+      register: sba_observed
+      changed_when: false
+      no_log: true
+      tags: [gcp_compute, get, validate]
+
+    - name: Assert postconditions
+      ansible.builtin.import_tasks: assert.yml
+      tags: [gcp_compute, get, validate, assert]
+
+- name: Destroy a GCP instance owned by this run
+  when: sba_operation == 'destroy'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [gcp_compute, destroy, preflight, lookup]
+
+    # Group E only. assert.yml is deliberately not imported here: the
+    # postconditions assert that an instance exists, and a successful destroy
+    # means it does not, so importing it would fail every correct destroy.
+    - name: Decommission
+      ansible.builtin.import_tasks: destroy.yml
+      tags: [gcp_compute, destroy]
+
+- name: Reapply the tag set to an existing instance
+  when: sba_operation == 'tag'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [gcp_compute, tag, preflight, lookup]
+
+    # Only annotations. A label change requires a stop and start on GCP, which
+    # is a reboot-equivalent, so the tag operation deliberately cannot correct
+    # a label. Say so rather than pretending otherwise.
+    - name: Apply the annotation set
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ sba_project }}"
+        zone: "{{ sba_zone }}"
+        annotations: "{{ sba_annotations }}"
+        state: present
+      register: sba_tag_result
+      no_log: true
+      when: sba_instance_exists | bool
+      tags: [gcp_compute, tag]
+
+    - name: Fail when asked to correct a label
+      ansible.builtin.fail:
+        msg: >-
+          The tag operation cannot change a GCP label. Adding or changing a
+          label requires stopping the instance, which is a reboot-equivalent,
+          so a label correction is a new request rather than a tag operation.
+          Annotations, which are freely mutable, have been applied. Code:
+          UPDATE.
+      when:
+        - sba_instance_exists | bool
+        - sba_existing.labels | default({}) | dict2items
+          | selectattr('value', 'ne', sba_labels[item.key] | default(''))
+          | selectattr('key', 'in', sba_labels) | list | length > 0
+      tags: [gcp_compute, tag]
+
+# An unknown operation must not fall through the chain and report success. A
+# dispatch that silently does nothing for an unrecognised value is a
+# correctness problem that shows up as a stage that passes without running.
+- name: Fail on an operation outside the closed set
+  ansible.builtin.fail:
+    msg: >-
+      sba_operation="{{ sba_operation }}" is not one of provision, get,
+      validate, destroy, tag. The dispatch map is closed (AD-08): a role name
+      or an operation built from input would be a path-traversal surface.
+  when: sba_operation not in ['provision', 'get', 'validate', 'destroy', 'tag']
+  tags: [gcp_compute, always]

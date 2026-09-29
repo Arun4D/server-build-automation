@@ -1,0 +1,155 @@
+---
+# B (continued) — the GCP metadata tail, then read the observed state back.
+#
+# Step 3 of the reference sequence in docs/architecture/cloud/gcp.md section
+# 9.1 exists for a reason that is easy to miss: a tag write can fail on the
+# provider side without the request reporting it. IAM denying the label API, a
+# label quota, a policy that strips labels on create — each can produce a
+# create that returned success and a resource with no ownership label. A
+# platform that trusted its own request would report complete metadata that is
+# not there, which breaks inventory, cost attribution and audit at the same
+# time. So the read-back is not a formality: it is the only evidence that
+# exists.
+
+- name: B6 — Read the instance back from the API
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    name: "{{ sba_name }}"
+  register: sba_observed
+  changed_when: false
+  no_log: true
+  retries: "{{ sba_retry_attempts }}"
+  delay: "{{ sba_retry_delay }}"
+  until: >-
+    sba_observed.resources | default([]) | length > 0
+    or 'RESOURCE_EXHAUSTED' in (sba_observed.msg | default(''))
+  tags: [gcp_compute, verify]
+
+# The single most important assertion in the role. A missing ownership label
+# here is terminal and the failure says so, because continuing would leave a
+# server the platform cannot subsequently manage or safely destroy: the
+# destroy-time lookup is by this same label, so it would find nothing and
+# either report a clean decommission of a live instance, or leave it running.
+- name: B7 — Assert the ownership label is present on the observed instance
+  ansible.builtin.fail:
+    msg: >-
+      The ownership label sba_instance_id={{ sba_instance_id }} is not present
+      on {{ sba_project }}/{{ sba_zone }}/{{ sba_name }} after create. Observed
+      labels: {{ sba_observed.resources[0].labels | default({}) | list | join(', ') | default('none', true) }}.
+      The create reported success, so something stripped or denied the label.
+      This is terminal: the destroy path looks instances up by this label, so
+      the platform could not clean up what it just created. Code: UPDATE.
+  when:
+    - sba_observed.resources | default([]) | length > 0
+    - sba_observed.resources[0].labels.sba_instance_id | default('') != sba_instance_id
+  tags: [gcp_compute, verify]
+
+# tag-completeness: every intended label present, not merely the ownership one.
+# A partial label set means a TagMapper or catalogue defect, and it is worth
+# catching now rather than discovering it in a cost report months later.
+- name: B8 — Assert the label set is complete against the intended set
+  ansible.builtin.assert:
+    that:
+      - sba_observed.resources[0].labels[item.key] | default('') == item.value
+    fail_msg: >-
+      Label {{ item.key }} is {{ sba_observed.resources[0].labels[item.key] | default('<absent>') }}
+      on {{ sba_name }}, expected {{ item.value }}. The create reported
+      success, so this is a tag quota or an IAM policy stripping the label.
+      Code: METADATA_REJECTED.
+    quiet: true
+  loop: "{{ sba_labels | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: sba_observed.resources | default([]) | length > 0
+  tags: [gcp_compute, verify]
+
+# Annotations are verified for the same reason as labels, and cheaply: they
+# were applied in a separate call precisely because they cannot ride along with
+# the create.
+- name: B9 — Assert the annotation set is complete against the intended set
+  ansible.builtin.assert:
+    that:
+      - sba_observed.resources[0].annotations[item.key] | default('') == item.value
+    fail_msg: >-
+      Annotation {{ item.key }} is
+      {{ sba_observed.resources[0].annotations[item.key] | default('<absent>') }}
+      on {{ sba_name }}, expected {{ item.value }}. Annotations are applied in
+      a separate call after create precisely because they cannot ride along with
+      it, so this assertion is the only evidence that call succeeded. Code:
+      METADATA_REJECTED.
+    quiet: true
+  loop: "{{ sba_annotations | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - sba_observed.resources | default([]) | length > 0
+    - sba_annotations | length > 0
+  tags: [gcp_compute, verify]
+
+# The external IP postcondition, asserted rather than assumed. The role omits
+# access_configs by default, but "we did not ask for one" is not "there is
+# none": an ephemeral address can be attached by anything holding
+# compute.instances.setNetworkInterface, including a well-meaning operator.
+- name: B10 — Assert no external IP is attached
+  ansible.builtin.assert:
+    that:
+      - sba_observed.resources[0].networkInterfaces | map(attribute='accessConfigs') | flatten | default([]) | length == 0
+    fail_msg: >-
+      Instance {{ sba_name }} has an external IP attached, which the run did not
+      request. A public address on a production server is a finding in most
+      baselines. Code: POLICY_VIOLATION. Terminal.
+    quiet: true
+  when:
+    - sba_observed.resources | default([]) | length > 0
+    - not sba_allow_external_ip | bool
+  tags: [gcp_compute, verify]
+
+- name: B11 — Record the observed provider state into sba_facts
+  ansible.builtin.set_fact:
+    sba_facts:
+      server:
+        instance_id: "{{ sba_observed.resources[0].id | default('') }}"
+        state: "{{ sba_observed.resources[0].status | default('') }}"
+        private_ip: >-
+          {{ sba_observed.resources[0].networkInterfaces
+             | map(attribute='networkIP') | first | default('') }}
+        fqdn: "{{ sba_fqdn }}"
+        parent_scope: "{{ sba_project }}/{{ sba_zone }}"
+      network:
+        vnet_id: >-
+          {{ sba_observed.resources[0].networkInterfaces
+             | map(attribute='network') | first | default('') }}
+        subnet_id: >-
+          {{ sba_observed.resources[0].networkInterfaces
+             | map(attribute='subnetwork') | first | default('') }}
+        nic_id: ""
+        private_ip: >-
+          {{ sba_observed.resources[0].networkInterfaces
+             | map(attribute='networkIP') | first | default('') }}
+        availability_zone: "{{ sba_observed.resources[0].zone | default('') }}"
+        public_ip: >-
+          {{ sba_observed.resources[0].networkInterfaces
+             | map(attribute='accessConfigs') | flatten
+             | map(attribute='natIP') | first | default('') }}
+      disk:
+        os_disk_id: >-
+          {{ sba_observed.resources[0].disks
+             | selectattr('boot', 'defined') | map(attribute='source') | first | default('') }}
+        data_disk_ids: >-
+          {{ sba_observed.resources[0].disks
+             | rejectattr('boot', 'defined') | map(attribute='source') | list }}
+        sizes_gb: "{{ sba_data_volumes | map(attribute='size_gb') | list }}"
+      image:
+        applied_image_id: >-
+          {{ sba_observed.resources[0].disks
+             | selectattr('boot', 'defined') | map(attribute='source') | first | default('') }}
+        applied_version: "{{ sba_resolved.image.build_date | default('') }}"
+        applied_digest: ""
+      tags:
+        applied: "{{ sba_observed.resources[0].labels | default({}) }}"
+        # A read-back, not an assertion about what was sent. True only because
+        # B7 through B9 compared the observed set against the intended set.
+        verified: true
+  when: sba_observed.resources | default([]) | length > 0
+  tags: [gcp_compute, record]

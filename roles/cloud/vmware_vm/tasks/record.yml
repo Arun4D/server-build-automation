@@ -1,0 +1,31 @@
+---
+# B (continued) — Read back VMware observed state and record into sba_facts
+- name: Read back VM info
+  community.vmware.vmware_guest_info:
+    hostname: "{{ sba_vcenter_hostname }}"
+    username: "{{ sba_vcenter_username }}"
+    password: "{{ sba_vcenter_password }}"
+    validate_certs: false
+    datacenter: "{{ sba_datacenter }}"
+    name: "{{ sba_name }}"
+  register: sba_observed_vmware
+  changed_when: false
+  tags: [vmware_vm, record]
+
+- name: Record observed state into sba_facts
+  ansible.builtin.set_fact:
+    sba_facts:
+      server:
+        instance_id: "{{ sba_observed_vmware.instance.instance_uuid | default(sba_instance_id) }}"
+        state: "{{ sba_observed_vmware.instance.hw_power_status | default('poweredOn') }}"
+        private_ip: "{{ sba_observed_vmware.instance.ipv4 | default(sba_vmware_create.instance.ipv4 | default('')) }}"
+        fqdn: "{{ sba_fqdn }}"
+      network:
+        private_ip: "{{ sba_observed_vmware.instance.ipv4 | default(sba_vmware_create.instance.ipv4 | default('')) }}"
+        network_name: "{{ sba_network }}"
+      image:
+        applied_image_id: "{{ sba_image_reference }}"
+      tags:
+        applied: "{{ sba_custom_values }}"
+        verified: true
+  tags: [vmware_vm, record]

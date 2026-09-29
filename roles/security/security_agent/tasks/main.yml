@@ -1,0 +1,49 @@
+---
+# Tasks for roles/security/security_agent
+# Installs and validates enterprise security tooling
+
+- name: Install and configure Qualys Cloud Agent
+  when: sba_security_agent_type == 'qualys' and sba_security_agent_enabled | bool
+  block:
+    - name: Check if Qualys agent is already installed
+      ansible.builtin.command:
+        cmd: which qualys-cloud-agent
+      register: sba_qualys_check
+      changed_when: false
+      failed_when: false
+      tags: [security_agent, check]
+
+    - name: Install Qualys package (RedHat)
+      ansible.builtin.dnf:
+        name: qualys-cloud-agent
+        state: present
+      when:
+        - ansible_os_family == 'RedHat'
+        - sba_qualys_check.rc != 0
+      tags: [security_agent, package]
+
+    - name: Install Qualys package (Debian)
+      ansible.builtin.apt:
+        name: qualys-cloud-agent
+        state: present
+      when:
+        - ansible_os_family == 'Debian'
+        - sba_qualys_check.rc != 0
+      tags: [security_agent, package]
+
+    - name: Activate Qualys Cloud Agent
+      ansible.builtin.command:
+        cmd: >-
+          /usr/local/qualys/cloud-agent/bin/qualys-cloud-agent.sh
+          CustomerId="{{ sba_qualys_customer_id }}"
+          ActivationId="{{ sba_qualys_activation_id }}"
+      no_log: true
+      when: sba_qualys_check.rc != 0
+      tags: [security_agent, activate]
+
+    - name: Ensure qualys-cloud-agent service is running and enabled
+      ansible.builtin.service:
+        name: qualys-cloud-agent
+        state: started
+        enabled: true
+      tags: [security_agent, service]

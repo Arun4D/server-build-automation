@@ -1,0 +1,125 @@
+---
+# Master Orchestration Playbook: End-to-End Server Build Automation
+# Dynamically routes across GCP, Azure, AWS, and Hybrid Cloud based on cloud_provider.
+# Executes two-phase workflow: Phase 1 (Cloud Provisioning) + Phase 2 (Decoupled Linux Post-Build).
+
+- name: Phase 1 — Dynamic Provider Routing & Cloud VM Provisioning
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    sba_provider_matrix_path: "{{ playbook_dir }}/../configuration/routing/provider_matrix.yml"
+
+  tasks:
+    - name: 1.1 — Read Run Context
+      ansible.builtin.slurp:
+        src: "{{ sba_run_context_path }}"
+      register: sba_run_context_raw
+      when: sba_run_context is not defined and sba_run_context_path is defined
+
+    - name: 1.2 — Parse Run Context
+      ansible.builtin.set_fact:
+        sba_run_context: "{{ sba_run_context_raw.content | b64decode | from_json }}"
+      when: sba_run_context is not defined and sba_run_context_path is defined
+
+    - name: 1.3 — Load Central Provider Routing Matrix
+      ansible.builtin.include_vars:
+        file: "{{ sba_provider_matrix_path }}"
+        name: sba_matrix
+
+    - name: 1.4 — Extract Provider Strategy
+      ansible.builtin.set_fact:
+        sba_provider_name: "{{ sba_run_context.cloud_provider | lower }}"
+        sba_provider_spec: "{{ sba_matrix.providers[sba_run_context.cloud_provider | lower] }}"
+        sba_resolved: "{{ sba_run_context.resolved }}"
+        sba_instance_id: "{{ sba_run_context.instance_id }}"
+        sba_name: "{{ sba_run_context.name }}"
+        sba_fqdn: "{{ sba_run_context.fqdn }}"
+
+    - name: 1.5 — Assert Provider Exists in Matrix
+      ansible.builtin.assert:
+        that:
+          - sba_provider_spec is defined
+        fail_msg: >-
+          Cloud provider '{{ sba_provider_name }}' is not configured in provider matrix.
+          Supported providers: {{ sba_matrix.providers.keys() | list }}.
+
+    - name: 1.6 — Resolve OS Image from Provider Image Registry
+      ansible.builtin.include_role:
+        name: "{{ sba_provider_spec.image_resolver_role }}"
+      vars:
+        sba_catalog_image: "{{ sba_resolved.image }}"
+        sba_image_name: "{{ sba_resolved.image.image | default('') }}"
+        sba_image_project: "{{ sba_resolved.image.project | default('') }}"
+      tags: [provision, image]
+
+    - name: 1.7 — Provision Cloud VM via Certified Provider Role
+      ansible.builtin.include_role:
+        name: "{{ sba_provider_spec.provision_role }}"
+      vars:
+        sba_operation: provision
+      tags: [provision, vm]
+
+    - name: 1.8 — Validate Provisioning Facts
+      ansible.builtin.assert:
+        that:
+          - sba_facts.network.private_ip is defined
+          - sba_facts.network.private_ip | length > 0
+        fail_msg: "Provisioning role failed to produce a valid private IP address in sba_facts."
+      tags: [provision, verify]
+
+    - name: 1.9 — Dynamic Inventory Injection (AD-18)
+      ansible.builtin.add_host:
+        name: "{{ sba_facts.server.fqdn | default(sba_fqdn) }}"
+        groups:
+          - target_servers
+          - linux_servers
+          - "{{ sba_provider_name }}_servers"
+        ansible_host: "{{ sba_facts.network.private_ip }}"
+        ansible_user: "{{ sba_resolved.ansible_user | default(sba_provider_spec.inventory.default_user) }}"
+        ansible_ssh_common_args: "{{ sba_provider_spec.inventory.ssh_args }}"
+        ansible_python_interpreter: "{{ sba_provider_spec.inventory.python_interpreter }}"
+        sba_facts: "{{ sba_facts }}"
+        sba_run_context: "{{ sba_run_context }}"
+        sba_resolved: "{{ sba_resolved }}"
+      tags: [inventory]
+
+    - name: 1.10 — Wait for SSH Port on Target Server
+      ansible.builtin.wait_for:
+        host: "{{ sba_facts.network.private_ip }}"
+        port: 22
+        state: started
+        delay: 5
+        timeout: 300
+      when: sba_wait_for_ssh | default(true) | bool
+      tags: [wait]
+
+
+- name: Phase 2 — Decoupled Linux Post-Build Orchestration
+  import_playbook: post_build/linux_post_build.yml
+  tags: [post_build]
+
+
+- name: Phase 3 — Audit & Execution Summary
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Emit Provisioning & Post-Build Completion Summary
+      ansible.builtin.debug:
+        msg:
+          status: "SUCCESS"
+          correlation_id: "{{ sba_run_context.correlation_id | default('N/A') }}"
+          instance_id: "{{ sba_instance_id }}"
+          server_name: "{{ sba_name }}"
+          fqdn: "{{ sba_fqdn }}"
+          cloud_provider: "{{ sba_provider_name }}"
+          private_ip: "{{ sba_facts.network.private_ip }}"
+          image_version: "{{ sba_facts.image.applied_image_id | default(sba_resolved.image.image | default('')) }}"
+          cmdb_sys_id: "{{ hostvars[sba_fqdn]['sba_cmdb_ci_sys_id'] | default('PENDING_RECONCILIATION') }}"
+          message: "Server provisioning and post-build configurations completed successfully."
+      tags: [always, report]

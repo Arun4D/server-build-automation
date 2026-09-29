@@ -1,0 +1,38 @@
+---
+# GCP Cloud Platform Configuration Catalogue
+provider: gcp
+name: Google Cloud Platform
+
+defaults:
+  zone_semantics: deployment_locality_only
+  enable_os_login: true
+  block_project_ssh_keys: true
+  shielded_vm: true
+  deletion_protection: false
+  root_volume_type: pd-balanced
+  root_volume_size_gb: 30
+  allow_external_ip: false
+
+environments:
+  dev:
+    project: sba-dev-project-01
+    network: projects/sba-net-dev/global/networks/sba-vpc-dev
+    subnet_pattern: "projects/sba-net-dev/regions/{region}/subnetworks/sba-sub-dev-{region}"
+    service_account_email: sba-vm-sa@sba-dev-project-01.iam.gserviceaccount.com
+  nonprod:
+    project: sba-nonprod-project-01
+    network: projects/sba-net-nonprod/global/networks/sba-vpc-nonprod
+    subnet_pattern: "projects/sba-net-nonprod/regions/{region}/subnetworks/sba-sub-nonprod-{region}"
+    service_account_email: sba-vm-sa@sba-nonprod-project-01.iam.gserviceaccount.com
+  prod:
+    project: sba-prod-project-01
+    network: projects/sba-net-prod/global/networks/sba-vpc-prod
+    subnet_pattern: "projects/sba-net-prod/regions/{region}/subnetworks/sba-sub-prod-{region}"
+    service_account_email: sba-vm-sa@sba-prod-project-01.iam.gserviceaccount.com
+
+machine_types:
+  standard_small: e2-standard-2
+  standard_medium: e2-standard-4
+  standard_large: e2-standard-8
+  compute_optimized: c2-standard-4
+  memory_optimized: m1-ultramem-40

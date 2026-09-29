@@ -1,0 +1,14 @@
+---
+# C — Converge and D — Wait for Hyper-V VM
+- name: Wait for Hyper-V VM IP assignment
+  ansible.windows.win_powershell:
+    script: |
+      $vm = Get-VM -Name "{{ sba_name }}"
+      ($vm | Get-VMNetworkAdapter).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+  delegate_to: "{{ sba_hyperv_host }}"
+  register: sba_wait_hyperv
+  until: sba_wait_hyperv.output | default([]) | length > 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  tags: [hyperv_vm, wait]

@@ -1,0 +1,185 @@
+---
+# A — Lookup. Validate, then find, then prove the found thing is adoptable.
+#
+# Nothing in group A creates a resource. That is what makes it safe to run at
+# the start of every attempt including a re-run: a lookup that mutated state
+# would make a second attempt indistinguishable from a first.
+
+- name: A1 — Assert the platform contract is present
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_project | length > 0
+      - sba_zone | length > 0
+    fail_msg: >-
+      The provider contract is incomplete: instance_id={{ sba_instance_id | length }},
+      name={{ sba_name | length }}, project={{ sba_project | length }},
+      zone={{ sba_zone | length }}. A role that creates with a missing coordinate
+      produces a resource in an unpredictable place, so this fails first.
+    quiet: true
+  tags: [gcp_compute, contract]
+
+# GCP resource names: 63 characters, lowercase, and no trailing separator. The
+# name is also the guest hostname, so an invalid name is both an API error and
+# a DNS problem later. Asserted here so the message names the rule rather than
+# returning a 400 that reads as though the value were wrong in some other way.
+- name: A2 — Assert the instance name satisfies the GCP naming rule
+  ansible.builtin.assert:
+    that:
+      - sba_name is match('^[a-z]([-a-z0-9]*[a-z0-9])?$')
+      - sba_name | length <= 63
+    fail_msg: >-
+      Instance name "{{ sba_name }}" is not a valid Compute Engine name. It must
+      be lowercase, 1-63 characters, match [a-z]([-a-z0-9]*[a-z0-9])?, and not
+      end in a separator. The name is also the guest hostname, so an invalid
+      name is a DNS defect as well as an API one.
+    quiet: true
+  tags: [gcp_compute, contract]
+
+# A zone is a deployment locality, not an isolated failure domain. This is a
+# documentation field as much as a technical one, so the role refuses to
+# pretend otherwise: a caller that believes it is getting resilience from a
+# zone should find out here, not in a post-incident review.
+- name: A3 — Assert the zone is not being treated as a resilience control
+  ansible.builtin.assert:
+    that:
+      - sba_resolved.zone_semantics | default('deployment_locality_only') == 'deployment_locality_only'
+    fail_msg: >-
+      zone_semantics is
+      {{ sba_resolved.zone_semantics | default('unset') }}, which is not a value
+      this platform recognises. A GCP zone is a deployment locality with no
+      capacity-isolated failure-domain guarantee; the platform does not
+      present zone choice as a resilience control.
+    quiet: true
+  tags: [gcp_compute, contract]
+
+# Per-run least privilege on GCP is an IAM condition on
+# resource.labels.sba_instance_id. Without that label the condition cannot
+# evaluate, and a condition that fails to evaluate must deny — so an instance
+# created without it is one the platform cannot write to or safely destroy.
+# This is the one metadata key the role does not supply on the caller's behalf.
+- name: A4 — Assert sba_instance_id is present in the label set
+  ansible.builtin.assert:
+    that:
+      - sba_labels.sba_instance_id is defined
+      - sba_labels.sba_instance_id == sba_instance_id
+    fail_msg: >-
+      The label set does not carry sba_instance_id={{ sba_instance_id }}. On GCP
+      this is not a metadata nicety: per-run least privilege is an IAM
+      condition on resource.labels.sba_instance_id, a condition that fails to
+      evaluate denies, and create-or-adopt looks the instance up by this label.
+      Without it the platform cannot manage or safely destroy what it creates.
+    quiet: true
+  tags: [gcp_compute, contract]
+
+# Label key and value limits are enforced by the API as a 400 invalidLabels,
+# which is a confusing error to receive from a create call. Checking here turns
+# it into a named failure that says which key is at fault.
+- name: A5 — Assert every label satisfies the GCP label rules
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[a-z][a-z0-9_-]{0,62}$')
+      - item.value is match('^[a-z0-9_-]{0,63}$')
+    fail_msg: >-
+      Label {{ item.key }}={{ item.value }} is not a valid GCP label. Keys are
+      1-63 characters starting with a lowercase letter; values are up to 63
+      characters of [a-z0-9_-]. The API rejects a bad label as a 400
+      invalidLabels at create time, which reads as though the create itself
+      were wrong.
+    quiet: true
+  loop: "{{ sba_labels | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  tags: [gcp_compute, contract]
+
+# A service account is attached at create and cannot be attached later without
+# a stop, so its absence is a create-time decision rather than a converge-time
+# correction. A null element here would be passed to the API as an empty
+# account.
+- name: A6 — Assert the service account email is a usable address
+  ansible.builtin.assert:
+    that:
+      - sba_service_account_email | length == 0
+        or sba_service_account_email is match('^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    fail_msg: >-
+      service_account_email "{{ sba_service_account_email }}" is neither empty
+      nor a valid address. A service account is attached at create and cannot be
+      added later without stopping the instance.
+    quiet: true
+  tags: [gcp_compute, contract]
+
+# The external IP path is gated on two conditions, not one. The flag makes the
+# policy exception visible as a code change; the justification string means the
+# exception cannot be made silently, and the reason travels into the run
+# record where an auditor will find it.
+- name: A7 — Assert an external IP exception is justified
+  ansible.builtin.assert:
+    that:
+      - sba_external_ip_justification | length > 0
+    fail_msg: >-
+      sba_allow_external_ip is set but no justification was given. A public IP on
+      a production server is a finding in most baselines, so the exception is
+      allowed and must carry a recorded reason.
+    quiet: true
+  when: sba_allow_external_ip | bool
+  tags: [gcp_compute, contract]
+
+- name: A8 — Assert the zone is usable in this project
+  google.cloud.gcp_compute_zone_info:
+    project: "{{ sba_project }}"
+    name: "{{ sba_zone }}"
+  register: sba_zone_lookup
+  changed_when: false
+  no_log: true
+  tags: [gcp_compute, preflight]
+
+# A zone that does not exist in the target region is a catalogue error, and
+# failing at preflight is far better than at create. ZONE_NOT_AVAILABLE is not
+# retryable: the zone will still not exist on the next attempt.
+- name: A9 — Fail when the zone does not exist in the project
+  ansible.builtin.fail:
+    msg: >-
+      Zone {{ sba_zone }} is not available in project {{ sba_project }}. A
+      region does not necessarily have every zone, so a catalogue entry naming
+      a zone that does not exist in the target region is a resolution error.
+      Code: ZONE_NOT_AVAILABLE. Not retryable.
+  when: sba_zone_lookup | default({}) | length == 0
+  tags: [gcp_compute, preflight]
+
+# The lookup is by label, never by name. A name can be edited by an operator in
+# a console; the label cannot, and it is the platform's own immutable record of
+# ownership. Looking up by name would find the wrong instance after a rename
+# and adopt a stranger's VM.
+- name: A10 — Look up the instance by sba_instance_id label
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+  register: sba_existing_instances
+  changed_when: false
+  no_log: true
+  tags: [gcp_compute, lookup]
+
+- name: A11 — Record whether this is a create or an adopt
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ sba_existing_instances.resources | default([]) | length > 0 }}"
+    sba_existing: "{{ sba_existing_instances.resources | default([]) | first | default({}) }}"
+  tags: [gcp_compute, lookup]
+
+# More than one instance carrying the same sba_instance_id means a previous run
+# was not cleaned up, or that something outside the platform is stamping the
+# label. Adopting the first would leave the others untracked and destroyable
+# only by name, which is precisely the ownership failure the label exists to
+# prevent.
+- name: A12 — Fail when the ownership label is ambiguous
+  ansible.builtin.fail:
+    msg: >-
+      {{ sba_existing_instances.resources | length }} instances in
+      {{ sba_project }}/{{ sba_zone }} carry sba_instance_id={{ sba_instance_id }}:
+      {{ sba_existing_instances.resources | map(attribute='name') | list | join(', ') }}.
+      Refusing to choose. Either a previous run left resources behind, or
+      something outside the platform is stamping the ownership label. Code:
+      AMBIGUOUS_RESOURCE. Not retryable.
+  when: sba_existing_instances.resources | default([]) | length > 1
+  tags: [gcp_compute, lookup]

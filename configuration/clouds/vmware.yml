@@ -1,0 +1,31 @@
+---
+# VMware vSphere Infrastructure Configuration Catalogue
+provider: vmware
+name: VMware vSphere
+
+defaults:
+  disk_provision_type: thin
+  root_volume_size_gb: 40
+  datacenter: "DC1"
+
+environments:
+  dev:
+    cluster: "Cluster-Dev"
+    datastore: "vsanDatastore-Dev"
+    network: "dvs-dev-workload"
+    folder: "Discovered virtual machine/Dev"
+  nonprod:
+    cluster: "Cluster-Nonprod"
+    datastore: "vsanDatastore-Nonprod"
+    network: "dvs-nonprod-workload"
+    folder: "Discovered virtual machine/Nonprod"
+  prod:
+    cluster: "Cluster-Prod"
+    datastore: "vsanDatastore-Prod"
+    network: "dvs-prod-workload"
+    folder: "Discovered virtual machine/Prod"
+
+sizing_profiles:
+  standard_small: { cpus: 2, memory_mb: 4096 }
+  standard_medium: { cpus: 4, memory_mb: 8192 }
+  standard_large: { cpus: 8, memory_mb: 16384 }

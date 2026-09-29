@@ -1,0 +1,74 @@
+---
+# Tasks for roles/os/linux_baseline
+# Idempotent Linux baseline configuration for RHEL and Ubuntu
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ sba_timezone }}"
+  tags: [baseline, timezone]
+
+- name: Install baseline packages (RedHat)
+  ansible.builtin.dnf:
+    name: "{{ sba_baseline_packages['RedHat'] }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'RedHat'
+  tags: [baseline, packages]
+
+- name: Install baseline packages (Debian)
+  ansible.builtin.apt:
+    name: "{{ sba_baseline_packages['Debian'] }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+  tags: [baseline, packages]
+
+- name: Configure Chrony NTP service
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart chronyd
+  when: ansible_os_family == 'RedHat'
+  tags: [baseline, ntp]
+
+- name: Ensure Chrony service is enabled and started
+  ansible.builtin.service:
+    name: "{{ 'chronyd' if ansible_os_family == 'RedHat' else 'chrony' }}"
+    state: started
+    enabled: true
+  tags: [baseline, ntp]
+
+- name: Apply kernel sysctl parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop: "{{ sba_sysctl_settings | dict2items }}"
+  tags: [baseline, sysctl]
+
+- name: Configure security limits
+  community.general.pam_limits:
+    domain: "{{ item.domain }}"
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop: "{{ sba_security_limits }}"
+  tags: [baseline, limits]
+
+- name: Configure enterprise standard login banner (/etc/issue.net)
+  ansible.builtin.copy:
+    content: |
+      *******************************************************************************
+      *  WARNING: Authorized Access Only!                                           *
+      *  All activities on this server are monitored, audited, and logged.          *
+      *  Disconnect immediately if you are not an authorized user.                  *
+      *******************************************************************************
+    dest: /etc/issue.net
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [baseline, banner]

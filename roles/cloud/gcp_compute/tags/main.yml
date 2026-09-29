@@ -1,0 +1,9 @@
+---
+# Playbook-level tags. A role's tags apply automatically to the play that
+# includes it, but the tag vocabulary is declared here so `--list-tags` is a
+# usable contract and a caller can select a group without knowing the file
+# layout.
+
+tags:
+  - always
+  - gcp_compute

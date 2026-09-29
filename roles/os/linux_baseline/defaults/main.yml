@@ -1,0 +1,47 @@
+---
+# Defaults for roles/os/linux_baseline
+
+sba_timezone: "UTC"
+sba_ntp_servers:
+  - "time.google.com"
+  - "0.pool.ntp.org"
+  - "1.pool.ntp.org"
+
+sba_baseline_packages:
+  RedHat:
+    - chrony
+    - curl
+    - wget
+    - jq
+    - unzip
+    - tar
+    - rsync
+    - lsof
+    - bind-utils
+    - policycoreutils-python-utils
+  Debian:
+    - chrony
+    - curl
+    - wget
+    - jq
+    - unzip
+    - tar
+    - rsync
+    - lsof
+    - dnsutils
+    - python3-apt
+
+sba_sysctl_settings:
+  vm.swappiness: "10"
+  net.core.somaxconn: "1024"
+  net.ipv4.tcp_syncookies: "1"
+
+sba_security_limits:
+  - domain: "*"
+    type: "soft"
+    item: "nofile"
+    value: "65536"
+  - domain: "*"
+    type: "hard"
+    item: "nofile"
+    value: "65536"

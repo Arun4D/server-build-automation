@@ -1,0 +1,31 @@
+---
+# AWS Cloud Platform Configuration Catalogue
+provider: aws
+name: Amazon Web Services
+
+defaults:
+  volume_type: gp3
+  root_volume_size_gb: 30
+  allow_external_ip: false
+
+environments:
+  dev:
+    account_id: "111122223333"
+    vpc_id_pattern: "vpc-dev-{region}"
+    subnet_pattern: "subnet-dev-{region}-workload"
+    iam_instance_profile: "sba-dev-ec2-role"
+  nonprod:
+    account_id: "444455556666"
+    vpc_id_pattern: "vpc-nonprod-{region}"
+    subnet_pattern: "subnet-nonprod-{region}-workload"
+    iam_instance_profile: "sba-nonprod-ec2-role"
+  prod:
+    account_id: "777788889999"
+    vpc_id_pattern: "vpc-prod-{region}"
+    subnet_pattern: "subnet-prod-{region}-workload"
+    iam_instance_profile: "sba-prod-ec2-role"
+
+instance_types:
+  standard_small: t3.large
+  standard_medium: m5.xlarge
+  standard_large: m5.2xlarge

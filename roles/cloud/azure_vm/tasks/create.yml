@@ -1,0 +1,41 @@
+---
+# B — Create or Adopt Azure VM
+- name: B1 — Resolve image
+  ansible.builtin.include_role:
+    name: image/azure_image
+  vars:
+    sba_catalog_image: "{{ sba_resolved.image }}"
+  tags: [azure_vm, image]
+
+- name: B2 — Create Network Interface (NIC)
+  azure.azcollection.azure_rm_networkinterface:
+    resource_group: "{{ sba_resource_group }}"
+    name: "nic-{{ sba_name }}"
+    virtual_network: "{{ sba_vnet_name }}"
+    subnet: "{{ sba_subnet_name }}"
+    tags: "{{ sba_tags | combine({'sba_instance_id': sba_instance_id}) }}"
+  register: sba_azure_nic
+  when: not sba_instance_exists | bool
+  tags: [azure_vm, nic]
+
+- name: B3 — Provision Virtual Machine
+  azure.azcollection.azure_rm_virtualmachine:
+    resource_group: "{{ sba_resource_group }}"
+    name: "{{ sba_name }}"
+    vm_size: "{{ sba_vm_size }}"
+    admin_username: "{{ sba_admin_username }}"
+    ssh_password_enabled: false
+    ssh_public_keys:
+      - path: "/home/{{ sba_admin_username }}/.ssh/authorized_keys"
+        key_data: "{{ sba_ssh_public_key | default(omit) }}"
+    network_interfaces:
+      - "nic-{{ sba_name }}"
+    image: "{{ sba_image_reference }}"
+    os_disk_caching: ReadWrite
+    os_disk_size_gb: "{{ sba_os_disk_size_gb }}"
+    managed_disk_type: "{{ sba_os_disk_type }}"
+    tags: "{{ sba_tags | combine({'sba_instance_id': sba_instance_id}) }}"
+    state: present
+  register: sba_azure_create
+  when: not sba_instance_exists | bool
+  tags: [azure_vm, create]

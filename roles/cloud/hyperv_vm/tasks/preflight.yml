@@ -1,0 +1,26 @@
+---
+# A — Preflight and Lookup for Hyper-V VM
+- name: A1 — Assert platform contract coordinates
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_hyperv_host | length > 0
+    fail_msg: "Hyper-V contract missing instance_id, name, or hyperv_host."
+    quiet: true
+  tags: [hyperv_vm, contract]
+
+- name: A2 — Check if VM already exists
+  ansible.windows.win_powershell:
+    script: |
+      Get-VM -Name "{{ sba_name }}" -ErrorAction SilentlyContinue | Select-Object -Property Id, Name, State
+  register: sba_hyperv_check
+  failed_when: false
+  changed_when: false
+  delegate_to: "{{ sba_hyperv_host }}"
+  tags: [hyperv_vm, lookup]
+
+- name: A3 — Record instance existence
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ sba_hyperv_check.output | default([]) | length > 0 }}"
+  tags: [hyperv_vm, lookup]

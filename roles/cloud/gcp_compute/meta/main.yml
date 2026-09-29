@@ -1,0 +1,37 @@
+---
+galaxy_info:
+  role_name: gcp_compute
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >-
+    Google Compute Engine provider role. Creates or adopts a VM from a pinned
+    image, per the six-group provider contract in
+    docs/architecture/role-dependency-model.md section 3.
+  license: MIT
+  min_ansible_version: "2.16"
+  # google.cloud 1.14.0 is the current line and it requires ansible-core 2.16.
+  # It keeps the gcp_compute_* module names; the references in this role are
+  # written against what is actually installed rather than against a 2.x
+  # collection that has not been published.
+  galaxy_tags:
+    - gcp
+    - compute
+    - cloud
+
+# gcp_image is invoked explicitly in tasks/create.yml, not declared here.
+#
+# A meta dependency is unconditional: it runs at role load, before any task in
+# this role. That is wrong twice over for the image role. It would run before
+# B1 sets the catalogue entry, so the image role would resolve an empty entry
+# and fail on the provision path; and it would run on the destroy and tag paths,
+# which need no image at all and would fail there for the same reason. The
+# dependency is real but conditional, and meta has no way to express that, so it
+# is expressed where it can be: an explicit include_role on the one path that
+# needs it.
+dependencies: []
+
+collections:
+  # Declared rather than assumed, so the role resolves outside the execution
+  # environment. An undeclared collection resolves at run time from whatever
+  # happens to be installed, which is non-deterministic by construction.
+  - google.cloud

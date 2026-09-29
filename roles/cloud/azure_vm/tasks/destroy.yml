@@ -1,0 +1,15 @@
+---
+# E — Decommission Azure VM
+- name: Delete Azure VM
+  azure.azcollection.azure_rm_virtualmachine:
+    resource_group: "{{ sba_resource_group }}"
+    name: "{{ sba_name }}"
+    state: absent
+  tags: [azure_vm, destroy]
+
+- name: Delete NIC
+  azure.azcollection.azure_rm_networkinterface:
+    resource_group: "{{ sba_resource_group }}"
+    name: "nic-{{ sba_name }}"
+    state: absent
+  tags: [azure_vm, destroy]

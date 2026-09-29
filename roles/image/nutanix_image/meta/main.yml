@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: SBA Platform Team
+  description: Nutanix AHV image resolver
+  company: Internal
+  license: proprietary
+  min_ansible_version: "2.15"
+dependencies: []

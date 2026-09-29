@@ -1,0 +1,127 @@
+---
+# C — Converge, and D — wait.
+#
+# Converge is deliberately small on GCP. Most attributes that are mutable
+# elsewhere are not mutable here, and the ones that are behave badly enough
+# that treating them as converge-time corrections would be wrong. See
+# docs/architecture/cloud/gcp.md section 9.2.
+
+# The only converge this role performs: the annotation set. Annotations are
+# freely mutable in place, with no restart, which makes them the one piece of
+# metadata that is genuinely safe to correct. Labels are not, and that
+# asymmetry is the whole reason the label set is asserted at create rather than
+# reconciled afterwards.
+- name: C1 — Converge the annotation set
+  google.cloud.gcp_compute_instance:
+    name: "{{ sba_name }}"
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    annotations: "{{ sba_annotations }}"
+    state: present
+  register: sba_converge_result
+  no_log: true
+  when:
+    - sba_instance_exists | bool
+    - sba_annotations | length > 0
+  tags: [gcp_compute, converge]
+
+# A machine type change is not a converge. GCP stops the VM for it in most
+# cases and refuses it in others, and silently rebooting a production payment
+# server is not something to discover from a playbook. The role reports it
+# instead of performing it.
+- name: C2 — Report a machine type difference rather than resizing
+  ansible.builtin.fail:
+    msg: >-
+      Instance {{ sba_name }} is {{ sba_existing.machineType }} and this run
+      resolved to {{ sba_machine_type_qualified }}. A machine type change is not
+      performed as a converge: GCP stops the instance for it in most cases and
+      refuses it in others. Raise a new request. Code: IMMUTABLE_MISMATCH.
+  when:
+    - sba_instance_exists | bool
+    # Basename comparison, consistent with B3b. This task is a second gate on
+    # the same fact B3b already checks, and it must agree with it, or an
+    # adopt that passed B3b would fail here with a message claiming a mismatch
+    # that does not exist.
+    - sba_existing.machineType | default('') | basename != sba_machine_type_qualified | basename
+    - sba_allow_machine_type_change | default(false) | bool == false
+  tags: [gcp_compute, converge]
+
+# A disk size change is likewise not a converge. Growing a disk on GCP means
+# creating a larger disk and copying; shrinking is impossible without replacing
+# the disk, and replacing the boot disk replaces the instance's root.
+- name: C3 — Report an OS disk size difference rather than growing
+  ansible.builtin.fail:
+    msg: >-
+      Instance {{ sba_name }} has an OS disk of
+      {{ sba_existing.disks | selectattr('boot', 'defined') | map(attribute='diskSizeGb') | first | default('unknown') }} GB
+      and this run resolved to {{ sba_root_volume_size_gb }} GB. A boot disk
+      change is a replacement, not a resize. Raise a new request. Code:
+      IMMUTABLE_MISMATCH.
+  when:
+    - sba_instance_exists | bool
+    - sba_root_volume_size_gb | int > 0
+    - sba_existing.disks | selectattr('boot', 'defined') | map(attribute='diskSizeGb') | first | default(0) | int
+      != sba_root_volume_size_gb | int
+    - sba_allow_disk_resize | default(false) | bool == false
+  tags: [gcp_compute, converge]
+
+# D — wait for ready. Two gates, because Compute Engine reporting RUNNING does
+# not mean the guest is reachable: the instance is running while its network
+# and agent stack is still coming up, and a stage that proceeds on RUNNING
+# alone fails at the first connection attempt with a timeout that says nothing
+# about the cause.
+- name: D1 — Wait for the instance to leave the provisioning state
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    name: "{{ sba_name }}"
+  register: sba_wait_provider
+  changed_when: false
+  no_log: true
+  retries: "{{ (sba_wait_ready_timeout | int / sba_retry_delay | int) | round(0, 'ceil') | int }}"
+  delay: "{{ sba_retry_delay }}"
+  until: >-
+    sba_wait_provider.resources | default([]) | length > 0
+    and sba_wait_provider.resources[0].status == 'RUNNING'
+  tags: [gcp_compute, wait]
+
+- name: D2 — Fail when the instance does not reach RUNNING
+  ansible.builtin.fail:
+    msg: >-
+      Instance {{ sba_name }} did not reach RUNNING within
+      {{ sba_wait_ready_timeout }}s. Last observed status:
+      {{ sba_wait_provider.resources[0].status | default('UNKNOWN') }}.
+      Code: CLOUD_API_TIMEOUT. Retryable.
+  when: >-
+    sba_wait_provider.resources | default([]) | length == 0
+    or sba_wait_provider.resources[0].status != 'RUNNING'
+  tags: [gcp_compute, wait]
+
+# The guest gate. Delegated to the instance over SSH, which is why it is a
+# delegate_to and not a provider call: the guest agent running is the only
+# evidence that the instance is actually usable, and provider status cannot
+# report it. Skipped when the instance is unreachable, because a build that
+# cannot reach its own target should surface that as a connectivity problem
+# rather than as a guest-agent failure.
+- name: D3 — Verify the guest agent is answering on the instance
+  ansible.builtin.command:
+    cmd: systemctl is-active google-guest-agent.service
+  register: sba_guest_agent
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ sba_facts.network.private_ip }}"
+  delegate_facts: false
+  become: false
+  vars:
+    ansible_user: "{{ sba_guest_probe_user | default('sba') }}"
+    ansible_ssh_private_key_file: "{{ sba_guest_probe_key | default(omit) }}"
+  when:
+    - sba_facts.network.private_ip | default('') | length > 0
+    - sba_guest_probe_enabled | default(false) | bool
+  tags: [gcp_compute, wait]
+
+- name: D4 — Record the readiness result
+  ansible.builtin.set_fact:
+    sba_guest_ready: "{{ (sba_guest_agent.rc | default(0)) == 0 }}"
+  when: sba_guest_probe_enabled | default(false) | bool
+  tags: [gcp_compute, wait]

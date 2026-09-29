@@ -1,0 +1,27 @@
+---
+# Provision stage for AWS EC2
+- name: Provision AWS EC2 instance from pinned AMI
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  serial: "{{ sba_serial | default(1) }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+  tasks:
+    - name: Read run context
+      ansible.builtin.slurp:
+        src: "{{ sba_run_context_path }}"
+      register: sba_run_context_raw
+
+    - name: Parse run context
+      ansible.builtin.set_fact:
+        sba_run_context: "{{ sba_run_context_raw.content | b64decode | from_json }}"
+
+    - name: Execute AWS provisioning role
+      ansible.builtin.include_role:
+        name: cloud/aws_ec2
+      vars:
+        sba_operation: provision
+        sba_resolved: "{{ sba_run_context.resolved }}"

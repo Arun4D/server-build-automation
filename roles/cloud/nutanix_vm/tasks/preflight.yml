@@ -1,0 +1,34 @@
+---
+# A — Preflight and Lookup for Nutanix VM
+- name: A1 — Assert platform contract coordinates
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_cluster_name | length > 0
+    fail_msg: "Nutanix contract missing instance_id, name, or cluster_name."
+    quiet: true
+  tags: [nutanix_vm, contract]
+
+- name: A2 — Check if VM already exists via Nutanix Prism API
+  ansible.builtin.uri:
+    url: "https://{{ sba_nutanix_host }}:9440/api/nutanix/v3/vms/list"
+    method: POST
+    user: "{{ sba_nutanix_username }}"
+    password: "{{ sba_nutanix_password }}"
+    validate_certs: false
+    force_basic_auth: true
+    body_format: json
+    body:
+      filter: "vm_name=={{ sba_name }}"
+    status_code: [200]
+  register: sba_nutanix_check
+  failed_when: false
+  changed_when: false
+  tags: [nutanix_vm, lookup]
+
+- name: A3 — Record instance existence
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ (sba_nutanix_check.json.entities | default([]) | length) > 0 }}"
+    sba_existing_nutanix: "{{ sba_nutanix_check.json.entities[0] if (sba_nutanix_check.json.entities | default([]) | length) > 0 else {} }}"
+  tags: [nutanix_vm, lookup]

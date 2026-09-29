@@ -1,0 +1,61 @@
+---
+# Tasks for roles/security/cis_linux
+# CIS Linux Benchmark Hardening Baseline
+
+- name: Disable unused/uncommon filesystems
+  ansible.builtin.copy:
+    content: "install {{ item }} /bin/true\nblacklist {{ item }}\n"
+    dest: "/etc/modprobe.d/sba-cis-{{ item }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ sba_cis_disabled_filesystems }}"
+  tags: [cis, filesystems]
+
+- name: Restrict core dumps in limits
+  community.general.pam_limits:
+    domain: "*"
+    limit_type: "hard"
+    limit_item: "core"
+    value: "0"
+  tags: [cis, limits]
+
+- name: Enforce core dumps restriction in sysctl
+  ansible.posix.sysctl:
+    name: fs.suid_dumpable
+    value: "0"
+    state: present
+    reload: true
+  tags: [cis, sysctl]
+
+- name: Harden SSH daemon configuration
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?{{ item.key }}\\b"
+    line: "{{ item.key }} {{ item.value }}"
+    state: present
+    validate: "/usr/sbin/sshd -t -f %s"
+  loop: "{{ sba_cis_sshd_config | dict2items }}"
+  notify: Reload sshd
+  tags: [cis, sshd]
+
+- name: Secure file permissions on sensitive files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "/etc/passwd", group: "root", mode: "0644" }
+    - { path: "/etc/shadow", group: "root", mode: "0000" }
+    - { path: "/etc/group",  group: "root", mode: "0644" }
+    - { path: "/etc/gshadow", group: "root", mode: "0000" }
+  tags: [cis, permissions]
+
+- name: Ensure auditd service is enabled and started
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true
+  when: ansible_os_family == 'RedHat'
+  tags: [cis, auditd]

@@ -1,0 +1,92 @@
+---
+# Main entrypoint for roles/domain/linux_domain_join
+# Robust Active Directory Domain Join with preflight, idempotency, and rescue blocks
+
+- name: Execute Active Directory Domain Join
+  block:
+    - name: Install required domain-join packages (RedHat)
+      ansible.builtin.dnf:
+        name: "{{ sba_ad_packages['RedHat'] }}"
+        state: present
+      when: ansible_os_family == 'RedHat'
+      tags: [domain_join, packages]
+
+    - name: Install required domain-join packages (Debian)
+      ansible.builtin.apt:
+        name: "{{ sba_ad_packages['Debian'] }}"
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+      tags: [domain_join, packages]
+
+    - name: Check current domain join status
+      ansible.builtin.command:
+        cmd: realm list
+      register: sba_realm_list
+      changed_when: false
+      failed_when: false
+      tags: [domain_join, status]
+
+    - name: Determine if already joined to target domain
+      ansible.builtin.set_fact:
+        sba_is_domain_joined: "{{ sba_ad_domain | lower in (sba_realm_list.stdout | default('') | lower) }}"
+      tags: [domain_join, status]
+
+    - name: Join system to Active Directory domain
+      ansible.builtin.command:
+        cmd: >-
+          realm join
+          --user={{ sba_ad_join_user }}
+          --computer-ou="{{ sba_ad_ou }}"
+          {{ sba_ad_domain }}
+        stdin: "{{ sba_ad_join_password }}"
+      no_log: true
+      when: not sba_is_domain_joined | bool
+      register: sba_realm_join_result
+      tags: [domain_join, join]
+
+    - name: Configure SSSD settings (/etc/sssd/sssd.conf)
+      community.general.ini_file:
+        path: /etc/sssd/sssd.conf
+        section: "domain/{{ sba_ad_domain }}"
+        option: use_fully_qualified_names
+        value: "{{ 'True' if sba_ad_use_fqdn_names else 'False' }}"
+        mode: '0600'
+        owner: root
+        group: root
+      notify: Restart sssd
+      tags: [domain_join, sssd]
+
+    - name: Enable automatic home directory creation (RedHat)
+      ansible.builtin.command:
+        cmd: authselect select sssd with-mkhomedir --force
+      when:
+        - ansible_os_family == 'RedHat'
+        - not sba_is_domain_joined | bool
+      tags: [domain_join, authselect]
+
+    - name: Restrict domain login permissions
+      ansible.builtin.command:
+        cmd: "realm permit -g {{ item | quote }}"
+      loop: "{{ sba_ad_allowed_groups }}"
+      when: sba_ad_allowed_groups | length > 0
+      tags: [domain_join, permit]
+
+    - name: Ensure oddjobd and SSSD services are enabled and started
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - sssd
+        - oddjobd
+      when: ansible_os_family == 'RedHat'
+      tags: [domain_join, services]
+
+  rescue:
+    - name: Handle domain join failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to join Linux server {{ inventory_hostname }} to Active Directory
+          domain {{ sba_ad_domain }}. Error: {{ sba_realm_join_result.stderr | default('Preflight or configuration check failed') }}.
+          Code: DOMAIN_JOIN_FAILED.

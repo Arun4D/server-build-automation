@@ -1,0 +1,124 @@
+---
+# Preflight for gcp_compute, without a live project.
+#
+# Everything this playbook exercises is either pure or asserted against a stub,
+# so it runs with no GCP credentials, no network and no project. That is the
+# point: the checks most likely to be wrong in this role are the preflight
+# asserts, and they are exactly the checks a smoke test against a real project
+# would exercise least often.
+
+- name: Unit — GCP label rules reject what the API would reject
+  ansible.builtin.assert:
+    that:
+      - "'sba' is match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'abc' is match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'Sba' is not match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'1abc' is not match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'a' * 63 is match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'a' * 64 is not match('^[a-z][a-z0-9_-]{0,62}$')"
+      - "'pay-emea_1' is match('^[a-z0-9_-]{0,63}$')"
+      - "'PAY-EMEA_1' is not match('^[a-z0-9_-]{0,63}$')"
+      - "'payments.example.com' is not match('^[a-z0-9_-]{0,63}$')"
+    fail_msg: "Label key and value rules do not match the Compute Engine API."
+    quiet: true
+  tags: [gcp_compute, unit, contract]
+
+# The instance name is the guest hostname, so the rule that matters most is the
+# lowercase one. A platform that lowercased a name on the caller's behalf would
+# create a resource under a name the requester could not predict, and the
+# hostname would not match what they asked for either.
+- name: Unit — GCP instance name rules
+  ansible.builtin.assert:
+    that:
+      - "'pypa001' is match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'pypa-001' is match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'PYPA001' is not match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'pypa001-' is not match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'-pypa001' is not match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'pypa_001' is not match('^[a-z]([-a-z0-9]*[a-z0-9])?$')"
+      - "'pypa001' | length <= 63"
+      - ("'p' * 64) is not match('^[a-z]([-a-z0-9]*[a-z0-9])?$') or ('p' * 64) | length <= 63"
+    fail_msg: "Instance name rules do not match the Compute Engine API."
+    quiet: true
+  tags: [gcp_compute, unit, contract]
+
+# zone_semantics is const in the run-context schema precisely so this cannot
+# drift. The playbook asserts the literal rather than trusting the schema, so a
+# schema edit that loosened it would be caught here too.
+- name: Unit — zone semantics is deployment_locality_only
+  ansible.builtin.assert:
+    that:
+      - zone_semantics == 'deployment_locality_only'
+      - "'europe-west1-b' is not match('^(eu|northamerica|asia)[0-9]+-[0-9]+$')"
+    fail_msg: >-
+      A GCP zone is a deployment locality, not an isolated failure domain. The
+      platform must not present zone choice as a resilience control, and the
+      only value it accepts says so.
+    quiet: true
+  vars:
+    zone_semantics: deployment_locality_only
+  tags: [gcp_compute, unit, contract]
+
+# The label the whole permission model rests on. If this key is ever dropped
+# from the label set, per-run least privilege silently becomes no least
+# privilege, because the IAM condition has nothing to match on and a condition
+# that fails to evaluate denies.
+- name: Unit — the ownership label is mandatory
+  ansible.builtin.assert:
+    that:
+      - labels | length > 0
+      - labels.sba_instance_id is defined
+      - labels.sba_instance_id == instance_id
+    fail_msg: >-
+      sba_instance_id must be present in the label set and must equal the
+      run's instance id. Per-run least privilege on GCP is an IAM condition on
+      resource.labels.sba_instance_id; without it the condition denies and the
+      create-or-adopt lookup finds nothing.
+    quiet: true
+  vars:
+    instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+    labels:
+      sba_instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+      sba_application: payments
+      sba_environment: prod
+      sba_managed_by: sba
+  tags: [gcp_compute, unit, contract]
+
+# external_ip is const false in the schema. The role's own behaviour is that
+# access_configs is an empty list, so there is no parameter a caller could pass
+# to get an address. This asserts the schema side of that pair.
+- name: Unit — external IP is never requested
+  ansible.builtin.assert:
+    that:
+      - not external_ip
+      - access_configs | length == 0
+    fail_msg: >-
+      The run context must not request an external IP, and the role must build
+      no access_configs. A public address on a production server is a finding in
+      most baselines, and Private Google Access is the supported egress path.
+    quiet: true
+  vars:
+    external_ip: false
+    access_configs: []
+  tags: [gcp_compute, unit, contract]
+
+# A family or "latest" is syntactically valid, so no API call will ever reject
+# it. That is the reason the catalogue and the schema both exclude it
+# structurally: the failure it causes is a reproducibility failure that only
+# appears on a later re-run, long after the build that made it succeeded.
+- name: Unit — a moving image reference is rejected
+  ansible.builtin.assert:
+    that:
+      - "'ubuntu-2204-lts-gold' is not match('^[^/]+$') or 'families/' not in image"
+      - "'latest' != image_name"
+      - "image_name is match('^[a-z0-9][a-z0-9-]{0,62}$')"
+    fail_msg: >-
+      The catalogue must pin an exact image name. A family or "latest" is a
+      moving reference; the idempotency check compares the instance's current
+      image to the recorded one, so a moving reference reports
+      OS_VERSION_MISMATCH on every no-op re-run.
+    quiet: true
+  vars:
+    image: projects/sbagoldimages/global/images/ubuntu-2204-lts-gold-v20260901
+    image_name: ubuntu-2204-lts-gold-v20260901
+  tags: [gcp_compute, unit, contract, image]

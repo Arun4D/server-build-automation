@@ -1,0 +1,139 @@
+---
+# get_image: resolve a catalogue entry to a provider image reference.
+#
+# Read-only. No resource is created, and nothing here mutates the catalogue.
+#
+# The rule this role exists to enforce: a catalogue entry names an exact image,
+# never a family. A family is a moving reference, and a moving reference on a
+# run whose idempotency check compares the instance's current image to the
+# recorded one reports OS_VERSION_MISMATCH on every no-op re-run. The one
+# acceptable exception is a GCP-published image used as a family, because a
+# vendor-published image has its own support lifecycle; the catalogue still
+# pins the resolved self link into the run record either way, so the recorded
+# value is unambiguous regardless of what the reference form was.
+
+- name: Fail when the catalogue entry is missing
+  ansible.builtin.fail:
+    msg: >-
+      sba_catalog_image is empty. The image comes from the reviewed catalogue,
+      never from the request, so an absent entry is a resolution failure and
+      not something to default.
+  when: sba_catalog_image | length == 0
+
+- name: Fail when the catalogue entry names no image
+  ansible.builtin.fail:
+    msg: >-
+      Catalogue entry {{ sba_catalog_image.catalog_id | default('<unnamed>') }}
+      has no image name. An entry must pin an exact image.
+  when: sba_image_name | length == 0
+
+- name: Fail when the catalogue entry names no image project
+  ansible.builtin.fail:
+    msg: >-
+      Catalogue entry {{ sba_catalog_image.catalog_id | default('<unnamed>') }}
+      has no image project. The image project is distinct from the
+      application project and is never inferred from it.
+  when: sba_image_project | length == 0
+
+# A family in a gold-image catalogue entry is a catalogue error, caught here
+# rather than at create. The API accepts a family, so this is the only place
+# the platform can refuse one, and refusing it here turns a future
+# reproducibility failure into a present, named resolution error.
+- name: Reject a family reference in a catalogue entry
+  ansible.builtin.assert:
+    that:
+      - "'families/' not in sba_image_name"
+      - sba_image_name != 'latest'
+    fail_msg: >-
+      Catalogue entry {{ sba_catalog_image.catalog_id | default('<unnamed>') }}
+      names "{{ sba_image_name }}", which is a moving reference. Pin the exact
+      image name. A family or "latest" makes the run non-reproducible and makes
+      a no-op re-run report OS_VERSION_MISMATCH, because the image the
+      idempotency check compares against is no longer the image the first run
+      recorded.
+    quiet: true
+
+- name: Describe the pinned image
+  google.cloud.gcp_compute_image_info:
+    project: "{{ sba_image_project }}"
+    filter: "name = {{ sba_image_name }}"
+  register: sba_image_lookup
+  changed_when: false
+  no_log: true
+
+- name: Fail when the pinned image does not exist
+  ansible.builtin.fail:
+    msg: >-
+      Image {{ sba_image_name }} does not exist in project
+      {{ sba_image_project }}. A catalogue entry naming a missing image is a
+      catalogue error; it is not retried, because the image will not appear.
+  when: sba_image_lookup.resources | default([]) | length == 0
+
+# One image, one entry. A name collision inside a project is not possible, so
+# a multi-entry result means the filter matched something unexpected, and
+# picking the first would make the build's image choice arbitrary.
+- name: Fail when the pinned image lookup is ambiguous
+  ansible.builtin.fail:
+    msg: >-
+      Image lookup for {{ sba_image_name }} in {{ sba_image_project }} returned
+      {{ sba_image_lookup.resources | length }} resources. Expected exactly one.
+      Refusing to choose, because an arbitrary pick would make the run's image
+      non-reproducible.
+  when: sba_image_lookup.resources | length != 1
+
+- name: Record the observed image facts
+  ansible.builtin.set_fact:
+    sba_image_self_link: "{{ sba_image_lookup.resources[0].selfLink }}"
+    sba_image_status: "{{ sba_image_lookup.resources[0].status | default('') }}"
+    sba_image_licence: >-
+      {{ (sba_image_lookup.resources[0].licenses | default([]) | first
+          | default({}, true)).get('licenseCode', '') }}
+    sba_image_observed_features: >-
+      {{ sba_image_lookup.resources[0].guestOsFeatures | default([])
+         | map(attribute='type') | list }}
+
+# A deprecated image still exists and still boots. That is exactly why it is
+# worth refusing: the create would succeed, the instance would come up, and the
+# vulnerability finding would arrive afterwards.
+- name: Fail when the image is deprecated
+  ansible.builtin.fail:
+    msg: >-
+      Image {{ sba_image_name }} has status {{ sba_image_status }}. A
+      deprecated image is refused rather than used: it still boots, so the
+      create would succeed and the exposure would be found by a scan later
+      rather than here.
+  when: sba_image_status == 'DEPRECATED'
+
+- name: Fail when the image is in an error state
+  ansible.builtin.fail:
+    msg: >-
+      Image {{ sba_image_name }} is in state {{ sba_image_status }}. An image
+      that is not READY cannot produce a bootable disk.
+  when: sba_image_status not in ['READY', 'STAGING', '']
+
+# The catalogue requests guest features; the image has to actually support
+# them. SEV_LAUNCH on an image without it fails at boot with a guest error that
+# is very hard to attribute back to the image, so the mismatch is caught here
+# where the message can name both sides.
+- name: Fail when a requested guest feature is absent from the image
+  ansible.builtin.assert:
+    that:
+      - feature in sba_image_observed_features
+    fail_msg: >-
+      Catalogue entry requests guest feature {{ feature }} but image
+      {{ sba_image_name }} supports only
+      {{ sba_image_observed_features | join(', ') | default('none', true) }}.
+      A missing feature surfaces as a boot failure attributed to the instance,
+      not to the image.
+    quiet: true
+  loop: "{{ sba_catalog_image.guest_os_features | default([]) }}"
+  loop_control:
+    # Named rather than using the bare `item`, so the assert and its failure
+    # message can refer to the feature by name. With a plain `item` the message
+    # would have to interpolate item, and the assert condition cannot.
+    loop_var: feature
+    label: "{{ feature }}"
+
+- name: Mark the image verified
+  ansible.builtin.set_fact:
+    sba_image_verified: true

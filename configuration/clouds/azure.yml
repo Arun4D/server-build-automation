@@ -1,0 +1,31 @@
+---
+# Azure Cloud Platform Configuration Catalogue
+provider: azure
+name: Microsoft Azure
+
+defaults:
+  os_disk_type: Premium_LRS
+  os_disk_size_gb: 30
+  allow_external_ip: false
+
+environments:
+  dev:
+    subscription_id: "00000000-0000-0000-0000-000000000001"
+    resource_group_pattern: "rg-sba-dev-{region}"
+    vnet_name: "vnet-sba-dev-{region}"
+    subnet_name: "snet-sba-dev-workload"
+  nonprod:
+    subscription_id: "00000000-0000-0000-0000-000000000002"
+    resource_group_pattern: "rg-sba-nonprod-{region}"
+    vnet_name: "vnet-sba-nonprod-{region}"
+    subnet_name: "snet-sba-nonprod-workload"
+  prod:
+    subscription_id: "00000000-0000-0000-0000-000000000003"
+    resource_group_pattern: "rg-sba-prod-{region}"
+    vnet_name: "vnet-sba-prod-{region}"
+    subnet_name: "snet-sba-prod-workload"
+
+vm_sizes:
+  standard_small: Standard_D2s_v5
+  standard_medium: Standard_D4s_v5
+  standard_large: Standard_D8s_v5

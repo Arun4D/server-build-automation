@@ -1,0 +1,31 @@
+---
+# Main entrypoint for roles/cloud/aws_ec2
+- name: Provision AWS EC2 Instance
+  when: sba_operation == 'provision'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [aws_ec2, provision, preflight]
+
+    - name: Create or adopt
+      ansible.builtin.import_tasks: create.yml
+      tags: [aws_ec2, provision, create]
+
+    - name: Read back and record
+      ansible.builtin.import_tasks: record.yml
+      tags: [aws_ec2, provision, record]
+
+    - name: Converge and wait
+      ansible.builtin.import_tasks: converge_wait.yml
+      tags: [aws_ec2, provision, wait]
+
+    - name: Assert postconditions
+      ansible.builtin.import_tasks: assert.yml
+      tags: [aws_ec2, provision, assert]
+
+- name: Destroy AWS EC2 Instance
+  when: sba_operation == 'destroy'
+  block:
+    - name: Decommission EC2 Instance
+      ansible.builtin.import_tasks: destroy.yml
+      tags: [aws_ec2, destroy]

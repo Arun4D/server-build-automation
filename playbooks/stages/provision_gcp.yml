@@ -1,0 +1,69 @@
+---
+# The provision stage for a GCP instance, on the controller.
+#
+# Controller-side: this play talks to the Compute Engine API, not to a host.
+# hosts: localhost rather than a control-plane group, because the stage runs
+# from the runner and the runner is not itself an inventory host in the
+# application environments. become is off because ansible.cfg sets it globally
+# and nothing here needs root: escalating to root on the runner to call a cloud
+# API is a privilege the runner does not need.
+#
+# Inventory notes: this playbook takes its inputs from the run context, not
+# from the inventory. The servers being built are generated at run time from the
+# run context (AD-18); a production server never appears in a checked-in
+# inventory file.
+
+- name: Provision GCP instances from pinned images
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  serial: "{{ sba_serial | default(1) }}"
+  # One instance at a time per run by default. A zone's capacity is a real
+  # constraint and a burst of creates is the most common way to hit
+  # ZONE_CAPACITY_EXHAUSTED, which is not retryable.
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+  tasks:
+    - name: Read the resolved run context
+      ansible.builtin.slurp:
+        src: "{{ sba_run_context_path }}"
+      register: sba_run_context_raw
+      # The context is not a secret, but it is authoritative run state and it
+      # should not be echoed into a log that a wider audience reads.
+      no_log: true
+
+    - name: Parse the run context
+      ansible.builtin.set_fact:
+        sba_run_context: "{{ sba_run_context_raw.content | b64decode | from_json }}"
+        sba_resolved: "{{ sba_run_context_raw.content | b64decode | from_json | json_query('$.resolved') }}"
+
+    # The instance count. One iteration per instance, with the index passed in,
+    # so each instance is an independent create-or-adopt and a failure on the
+    # third does not leave the first two unrecorded.
+    - name: Provision each instance
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      loop: "{{ sba_resolved.naming.instances }}"
+      loop_control:
+        loop_var: sba_instance
+        label: "{{ sba_instance.short_name }} ({{ sba_instance.sba_instance_id }})"
+      vars:
+        sba_instance_id: "{{ sba_instance.sba_instance_id }}"
+        sba_name: "{{ sba_instance.short_name }}"
+        sba_fqdn: "{{ sba_instance.fqdn }}"
+        # A zone assigned by the resolver's zone_selection strategy. GCP's
+        # zone is a deployment locality: spreading across zones avoids a single
+        # zone's capacity limit and spreads quotas, and it is not a resilience
+        # control, because GCP zones share infrastructure.
+        sba_zone: "{{ sba_instance.zone }}"
+        sba_operation: "{{ sba_operation | default('provision') }}"
+
+  post_tasks:
+    - name: Write the stage result document
+      ansible.builtin.copy:
+        content: "{{ sba_facts | to_nice_json }}"
+        dest: "{{ sba_stage_result_path }}"
+        mode: "0600"
+      when: sba_stage_result_path is defined

@@ -1,0 +1,5 @@
+---
+# Defaults for roles/image/nutanix_image
+sba_catalog_image: {}
+sba_image_name: "{{ sba_catalog_image.image_name | default('') }}"
+sba_image_verified: false

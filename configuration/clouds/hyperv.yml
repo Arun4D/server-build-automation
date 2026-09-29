@@ -1,0 +1,28 @@
+---
+# Microsoft Hyper-V Infrastructure Configuration Catalogue
+provider: hyperv
+name: Microsoft Hyper-V
+
+defaults:
+  generation: 2
+  root_volume_size_gb: 40
+  dynamic_memory: false
+
+environments:
+  dev:
+    host_cluster: "HV-CLUSTER-DEV"
+    switch_name: "vSwitch-Dev"
+    vhd_path: "C:\\ClusterStorage\\Volume1\\VirtualHardDisks"
+  nonprod:
+    host_cluster: "HV-CLUSTER-NONPROD"
+    switch_name: "vSwitch-Nonprod"
+    vhd_path: "C:\\ClusterStorage\\Volume2\\VirtualHardDisks"
+  prod:
+    host_cluster: "HV-CLUSTER-PROD"
+    switch_name: "vSwitch-Prod"
+    vhd_path: "C:\\ClusterStorage\\Volume3\\VirtualHardDisks"
+
+sizing_profiles:
+  standard_small: { processor_count: 2, memory_startup_bytes: 4294967296 }
+  standard_medium: { processor_count: 4, memory_startup_bytes: 8589934592 }
+  standard_large: { processor_count: 8, memory_startup_bytes: 17179869184 }

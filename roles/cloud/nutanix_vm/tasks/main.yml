@@ -1,0 +1,31 @@
+---
+# Main entrypoint for roles/cloud/nutanix_vm
+- name: Provision Nutanix Virtual Machine
+  when: sba_operation == 'provision'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [nutanix_vm, provision, preflight]
+
+    - name: Create or adopt
+      ansible.builtin.import_tasks: create.yml
+      tags: [nutanix_vm, provision, create]
+
+    - name: Read back and record
+      ansible.builtin.import_tasks: record.yml
+      tags: [nutanix_vm, provision, record]
+
+    - name: Converge and wait
+      ansible.builtin.import_tasks: converge_wait.yml
+      tags: [nutanix_vm, provision, wait]
+
+    - name: Assert postconditions
+      ansible.builtin.import_tasks: assert.yml
+      tags: [nutanix_vm, provision, assert]
+
+- name: Destroy Nutanix Virtual Machine
+  when: sba_operation == 'destroy'
+  block:
+    - name: Decommission VM
+      ansible.builtin.import_tasks: destroy.yml
+      tags: [nutanix_vm, destroy]

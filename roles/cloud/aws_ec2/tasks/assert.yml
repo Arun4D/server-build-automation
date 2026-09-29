@@ -1,0 +1,10 @@
+---
+# F — Assert AWS EC2
+- name: Assert EC2 instance exists and has private IP
+  ansible.builtin.assert:
+    that:
+      - sba_facts.server.instance_id | length > 0
+      - sba_facts.network.private_ip | length > 0
+    fail_msg: "AWS EC2 postcondition failed: missing instance_id or private_ip."
+    quiet: true
+  tags: [aws_ec2, assert]

@@ -1,0 +1,53 @@
+---
+# Decoupled Phase 2: Linux Post-Build Configuration Playbook
+# Executes against provisioned guest servers in the target inventory group.
+# Applies OS baseline, Active Directory domain join, CIS hardening,
+# monitoring/security agents, DNS registration, and ServiceNow CMDB updates.
+
+- name: Post-Build Configuration for Linux Servers
+  hosts: target_servers
+  gather_facts: true
+  become: true
+  serial: "{{ sba_post_build_serial | default('100%') }}"
+
+  tasks:
+    - name: Stage 2.1 — Apply Linux OS Baseline
+      ansible.builtin.import_role:
+        name: os/linux_baseline
+      tags: [post_build, baseline]
+
+    - name: Stage 2.2 — Join Server to Active Directory Domain
+      ansible.builtin.import_role:
+        name: domain/linux_domain_join
+      tags: [post_build, domain_join]
+
+    - name: Stage 2.3 — Apply CIS Benchmark Security Hardening
+      ansible.builtin.import_role:
+        name: security/cis_linux
+      tags: [post_build, cis]
+
+    - name: Stage 2.4 — Install Enterprise Monitoring Agent
+      ansible.builtin.import_role:
+        name: monitoring/monitoring_agent
+      tags: [post_build, monitoring]
+
+    - name: Stage 2.5 — Install Enterprise Security / EDR Agent
+      ansible.builtin.import_role:
+        name: security/security_agent
+      tags: [post_build, security_agent]
+
+    - name: Stage 2.6 — Perform DNS Registration
+      ansible.builtin.import_role:
+        name: dns/dns_registration
+      tags: [post_build, dns]
+
+    - name: Stage 2.7 — Register Server in ServiceNow CMDB
+      ansible.builtin.import_role:
+        name: cmdb/servicenow_cmdb
+      tags: [post_build, cmdb]
+
+    - name: Stage 2.8 — Emit Stage 2 Completion Fact
+      ansible.builtin.set_fact:
+        sba_post_build_status: "SUCCESS"
+        sba_post_build_completed_at: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+      tags: [post_build, always]

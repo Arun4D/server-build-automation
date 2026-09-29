@@ -1,0 +1,85 @@
+---
+# E — Decommission.
+#
+# Destroy is grouped after the happy path deliberately, and it is the part of
+# this role most worth reading. GCP has no separate network interface resource
+# to tear down, which makes it the simplest of the three providers to destroy,
+# and a simpler destroy is a reason to be more careful about ownership rather
+# than less: it is very easy to delete a Compute Engine instance by name, and
+# the label-based ownership check is the only thing standing between a mis-scoped
+# destroy and an outage.
+
+- name: E1 — List every resource carrying this run's ownership label
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+  register: sba_owned
+  changed_when: false
+  no_log: true
+  tags: [gcp_compute, destroy]
+
+- name: E2 — Assert the destroy target is owned by this run
+  ansible.builtin.fail:
+    msg: >-
+      Refusing to destroy anything: no instance in {{ sba_project }}/{{ sba_zone }}
+      carries sba_instance_id={{ sba_instance_id }}. The lookup is by label and
+      never by name, so a name-scoped destroy would be the only thing deleting
+      an instance the platform does not own. If this run adopted an instance
+      from a previous run, its label is missing and the instance must be
+      reconciled by hand. Code: OWNERSHIP_CHECK_FAILED. Not retryable.
+  when: sba_owned.resources | default([]) | length == 0
+  tags: [gcp_compute, destroy]
+
+# Reverse creation order. On GCP the data disks are detached by the instance
+# deletion, so the instance goes first and the disks after; deleting a disk
+# that an instance still references fails with resourceInUseByAnotherResource,
+# which is a bounded retry rather than an error.
+- name: E3 — Delete the instance
+  google.cloud.gcp_compute_instance:
+    name: "{{ sba_owned.resources[0].name }}"
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    deletion_protection: false
+    state: absent
+  register: sba_delete_instance
+  no_log: true
+  when: sba_owned.resources | default([]) | length > 0
+  tags: [gcp_compute, destroy]
+
+- name: E4 — Delete the non-boot disks
+  google.cloud.gcp_compute_disk:
+    name: "{{ item }}"
+    project: "{{ sba_project }}"
+    zone: "{{ sba_zone }}"
+    state: absent
+  register: sba_delete_disks
+  no_log: true
+  # resourceInUseByAnotherResource: the instance deletion has been accepted but
+  # the detach has not completed. Transient, and bounded, rather than an error.
+  retries: "{{ sba_retry_attempts }}"
+  delay: "{{ sba_retry_delay }}"
+  until: >-
+    sba_delete_disks is succeeded
+    or 'resourceInUseByAnotherResource' in (sba_delete_disks.msg | default(''))
+  loop: >-
+    {{ sba_owned.resources[0].disks | default([])
+       | rejectattr('boot', 'defined') | map(attribute='source')
+       | map('basename') | list }}
+  loop_control:
+    label: "{{ item }}"
+  when: sba_owned.resources | default([]) | length > 0
+  tags: [gcp_compute, destroy]
+
+# Deleting a disk that is already gone is success, not a failure. Without this
+# a re-run of destroy over an already-destroyed instance reports failure, and a
+# stage that is idempotent on the happy path is not idempotent on the way out.
+- name: E5 — Treat an absent disk as already deleted
+  ansible.builtin.debug:
+    msg: "Disk {{ item }} is already absent; treating as deleted."
+  when: sba_delete_disks is failed
+  loop: "{{ sba_delete_disks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('unknown') }}"
+  failed_when: false
+  tags: [gcp_compute, destroy]

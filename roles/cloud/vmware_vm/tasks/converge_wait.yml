@@ -1,0 +1,19 @@
+---
+# C — Converge and D — Wait for VMware VM
+- name: Wait for VMware tools and guest IP
+  community.vmware.vmware_guest_info:
+    hostname: "{{ sba_vcenter_hostname }}"
+    username: "{{ sba_vcenter_username }}"
+    password: "{{ sba_vcenter_password }}"
+    validate_certs: false
+    datacenter: "{{ sba_datacenter }}"
+    name: "{{ sba_name }}"
+  register: sba_wait_vmware
+  until: >-
+    sba_wait_vmware.instance is defined
+    and sba_wait_vmware.instance.hw_power_status == 'poweredOn'
+    and (sba_wait_vmware.instance.ipv4 | default('') | length > 0)
+  retries: 30
+  delay: 10
+  changed_when: false
+  tags: [vmware_vm, wait]

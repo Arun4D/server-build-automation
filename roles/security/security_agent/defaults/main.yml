@@ -1,0 +1,7 @@
+---
+# Defaults for roles/security/security_agent
+
+sba_security_agent_type: "qualys"  # or crowdstrike, wazuh
+sba_qualys_activation_id: "{{ lookup('ansible.builtin.env', 'SBA_QUALYS_ACTIVATION_ID', default='placeholder_act_id') }}"
+sba_qualys_customer_id: "{{ lookup('ansible.builtin.env', 'SBA_QUALYS_CUSTOMER_ID', default='placeholder_cust_id') }}"
+sba_security_agent_enabled: true

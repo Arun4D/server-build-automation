@@ -1,0 +1,32 @@
+---
+# Defaults for the GCP image role.
+#
+# This role implements one operation, get_image, per the family contract in
+# docs/architecture/role-dependency-model.md section 2.2. It resolves a
+# catalogue entry to a provider image reference and refuses to resolve a
+# moving one.
+
+# The catalogue entry. Supplied by the resolver, not by the requester: the
+# catalogue is a reviewed artefact, and an image name arriving from a request
+# would let a requester choose the base image of a production server.
+sba_catalog_image: {}
+
+# The image's project. Distinct from sba_project: gold images normally live in
+# a shared images project while the instance lands in an application project,
+# and conflating them means an image project grant is read as a compute grant.
+sba_image_project: "{{ sba_catalog_image.project | default('') }}"
+sba_image_name: "{{ sba_catalog_image.image | default('') }}"
+
+# Self link, once resolved. Output of the role, and the only form written into
+# the run record.
+sba_image_self_link: ""
+
+# The resolved image's observed facts, set by tasks/main.yml and consumed by
+# gcp_compute. The image is verified before it is used: an image that is
+# deprecated, or in a state that cannot boot, is a resolution failure rather
+# than a create failure, because a create failure is slower and its error
+# message is worse.
+sba_image_verified: false
+sba_image_status: ""
+sba_image_licence: ""
+sba_image_observed_features: []

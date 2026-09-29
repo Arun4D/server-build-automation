@@ -1,0 +1,7 @@
+---
+# Defaults for roles/monitoring/monitoring_agent
+
+sba_monitoring_provider: "{{ sba_run_context.cloud_provider | default('gcp') }}"
+sba_ops_agent_repo_url: "https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh"
+sba_enable_ops_agent: true
+sba_node_exporter_port: 9100

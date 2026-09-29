@@ -1,0 +1,10 @@
+---
+# E — Decommission Hyper-V VM
+- name: Stop and delete Hyper-V VM
+  ansible.windows.win_powershell:
+    script: |
+      Stop-VM -Name "{{ sba_name }}" -Force -TurnOff -ErrorAction SilentlyContinue
+      Remove-VM -Name "{{ sba_name }}" -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path "{{ sba_vhd_path }}\\{{ sba_name }}.vhdx" -Force -ErrorAction SilentlyContinue
+  delegate_to: "{{ sba_hyperv_host }}"
+  tags: [hyperv_vm, destroy]

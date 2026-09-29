@@ -1,0 +1,6 @@
+---
+# Defaults for roles/image/hyperv_image
+sba_catalog_image: {}
+sba_source_vhd: "{{ sba_catalog_image.source_vhd | default('') }}"
+sba_generation: "{{ sba_catalog_image.generation | default(2) | int }}"
+sba_image_verified: false

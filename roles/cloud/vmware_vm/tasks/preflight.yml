@@ -1,0 +1,29 @@
+---
+# A — Preflight and Lookup for VMware VM
+- name: A1 — Assert platform contract coordinates
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_datacenter | length > 0
+    fail_msg: "VMware contract missing instance_id, name, or datacenter."
+    quiet: true
+  tags: [vmware_vm, contract]
+
+- name: A2 — Check if VM already exists
+  community.vmware.vmware_guest_info:
+    hostname: "{{ sba_vcenter_hostname }}"
+    username: "{{ sba_vcenter_username }}"
+    password: "{{ sba_vcenter_password }}"
+    validate_certs: false
+    datacenter: "{{ sba_datacenter }}"
+    name: "{{ sba_name }}"
+  register: sba_vmware_check
+  failed_when: false
+  changed_when: false
+  tags: [vmware_vm, lookup]
+
+- name: A3 — Record instance existence
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ (sba_vmware_check.instance is defined) and (sba_vmware_check.instance | length > 0) }}"
+  tags: [vmware_vm, lookup]

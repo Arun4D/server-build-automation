@@ -1,0 +1,6 @@
+---
+# Defaults for roles/image/aws_image
+sba_catalog_image: {}
+sba_image_ami_id: "{{ sba_catalog_image.ami_id | default('') }}"
+sba_image_owner_id: "{{ sba_catalog_image.owner_id | default('') }}"
+sba_image_verified: false

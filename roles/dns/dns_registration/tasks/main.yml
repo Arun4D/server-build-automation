@@ -1,0 +1,19 @@
+---
+# Tasks for roles/dns/dns_registration
+# Registers A records in Cloud DNS or Corporate DNS
+
+- name: Register DNS record in Google Cloud DNS
+  when: sba_dns_provider == 'gcp'
+  delegate_to: localhost
+  become: false
+  google.cloud.gcp_dns_resource_record_set:
+    name: "{{ sba_dns_server_fqdn }}."
+    managed_zone:
+      name: "{{ sba_dns_managed_zone }}"
+    type: A
+    ttl: "{{ sba_dns_ttl }}"
+    target:
+      - "{{ sba_dns_server_ip }}"
+    project: "{{ sba_resolved.project | default(omit) }}"
+    state: present
+  tags: [dns, register]

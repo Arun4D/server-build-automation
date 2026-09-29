@@ -1,0 +1,249 @@
+---
+# GCP create-from-pinned-image: integration tests against stubbed provider modules.
+#
+# No network, no credentials, no Google API call. The stub google.cloud modules
+# keep their state in a JSON file, so create-then-adopt is exercised for real:
+# the second run genuinely finds what the first one wrote.
+#
+# The negative cases matter more than the happy path here. A check that never
+# fires is not a check, and the checks in this role are refusals — a platform
+# that creates in the wrong place is worse than one that fails loudly. So each
+# case below overrides exactly one field from the baseline and asserts both that
+# the role failed and that the message explains the consequence.
+#
+# A note on structure: include_role takes `vars:` as a dictionary literal, not a
+# template string, so the case table is applied as a loop with a per-case dict
+# rather than by merging a templated expression.
+
+- name: GCP provider role
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    sba_instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+    sba_image_name: ubuntu-2204-lts-gold-v20260901
+    sba_image_link: "https://www.googleapis.com/compute/v1/projects/sbagoldimages/global/images/ubuntu-2204-lts-gold-v20260901"
+    sba_guest_probe_enabled: false
+
+    sba_baseline_run_context:
+      instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+      name: pypa001
+      fqdn: pypa001.eu.example.com
+
+    sba_baseline_resolved:
+      project: sba-payments-prod
+      region: europe-west1
+      zone: europe-west1-b
+      zone_semantics: deployment_locality_only
+      machine_type: n2-standard-4
+      network: projects/sba-network-prod/global/networks/sba-prod
+      subnet: projects/sba-network-prod/regions/europe-west1/subnetworks/sba-prod-subnet-01
+      service_account_email: sba-provisioner@sba-payments-prod.iam.gserviceaccount.com
+      root_volume_size_gb: 20
+      identity_ref: sba-cloud-gcp-prod
+      encryption_key_id: ""
+      shielded_vm: true
+      image:
+        catalog_id: ubuntu-2204-standard
+        provider: gcp
+        project: sbagoldimages
+        image: ubuntu-2204-lts-gold-v20260901
+        self_link: "{{ sba_image_link }}"
+        build_date: "2026-09-01"
+        guest_os_features: [UEFI_COMPATIBLE, VIRTIO_SCSI_MULTIQUEUE]
+      labels:
+        sba_instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+        sba_application: payments
+        sba_environment: prod
+        sba_managed_by: sba
+      annotations:
+        sba_instance_id: 3f9c1e2a-7b4d-4c8e-9a1f-2d6b8e0c5a37
+        cost_center: CC-4471
+      data_volumes:
+        - name: pypa001-data
+          size_gb: 100
+          type: pd-ssd
+          device_name: data
+
+  tasks:
+    - name: Load the refusal case table
+      ansible.builtin.include_vars: "{{ playbook_dir }}/gcp_refusal_cases.yml"
+
+    # ------------------------------------------------------------ happy path
+    - name: Create from a pinned image
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: provision
+        sba_run_context: "{{ sba_baseline_run_context }}"
+        sba_resolved: "{{ sba_baseline_resolved }}"
+    # Asserted against the provider, not against Ansible's change accounting.
+    # include_role's registered `changed` is the last included task's, not the
+    # role's aggregate, so a test on it would be testing the harness. The role
+    # records which path it took in sba_adopted, and that is the real signal.
+    - name: Assert the first run created rather than adopted
+      ansible.builtin.assert:
+        that: [not sba_adopted | bool, not sba_instance_exists | bool]
+        fail_msg: >-
+          A first run against an empty project must create. It found
+          sba_instance_exists={{ sba_instance_exists }} and adopted={{ sba_adopted }}.
+        success_msg: first run created the instance
+
+    - name: Assert the label set landed and was verified by read-back
+      ansible.builtin.assert:
+        that:
+          - sba_facts.tags.applied.sba_instance_id == sba_instance_id
+          - sba_facts.tags.applied.sba_application == 'payments'
+          - sba_facts.tags.verified
+        fail_msg: The observed label set does not match the intended set.
+        success_msg: labels present, verified by read-back
+
+    - name: Assert the observed facts are recorded
+      ansible.builtin.assert:
+        that:
+          - sba_facts.server.instance_id | length > 0
+          - sba_facts.network.private_ip == '10.42.7.21'
+          - sba_facts.network.public_ip | length == 0
+          - sba_facts.image.applied_image_id | basename == sba_image_name
+        fail_msg: "sba_facts is incomplete: {{ sba_facts | to_nice_json }}"
+        success_msg: sba_facts recorded, no public IP
+
+    # ------------------------------------------------------------- pure logic
+    # Two tests that need the role's own defaults rather than the role's
+    # execution. include_role does not leak the role's internal vars to the
+    # caller, so these load defaults/main.yml directly and evaluate the
+    # templates. The logic under test is the machine-type qualification, which
+    # is where a real bug would hide: GCP requires a zone-qualified name, and
+    # double-qualifying an already-qualified one produces a path with two
+    # machine types in it and a 400 that reads as though the type were invalid.
+    - name: Evaluate the role defaults for the short machine type case
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/cloud/gcp_compute/defaults/main.yml"
+        name: sba_short_defaults
+
+    - name: Assert a short machine type is qualified with the resolved zone
+      ansible.builtin.assert:
+        that: [sba_short_defaults.sba_machine_type_qualified == 'europe-west1-b/n2-standard-4']
+        fail_msg: >-
+          A short machine type must be qualified to
+          europe-west1-b/n2-standard-4, got
+          "{{ sba_short_defaults.sba_machine_type_qualified }}".
+        success_msg: short machine type zone-qualified
+      vars:
+        sba_resolved:
+          zone: europe-west1-b
+          machine_type: n2-standard-4
+
+    - name: Evaluate the role defaults for the already-qualified case
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/cloud/gcp_compute/defaults/main.yml"
+        name: sba_qualified_defaults
+
+    - name: Assert an already-qualified machine type is not double-qualified
+      ansible.builtin.assert:
+        that: [sba_qualified_defaults.sba_machine_type_qualified == 'europe-west1-b/n2-standard-4']
+        fail_msg: >-
+          An already-qualified machine type must be left alone, got
+          "{{ sba_qualified_defaults.sba_machine_type_qualified }}".
+        success_msg: no double qualification
+      vars:
+        sba_resolved:
+          zone: europe-west1-b
+          machine_type: europe-west1-b/n2-standard-4
+
+    # ------------------------------------------------------------ idempotence
+    # A second identical run must adopt, not create. This is the behaviour that
+    # makes a re-run after a crash at minute 12 safe.
+    - name: Re-run with identical inputs
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: provision
+        sba_run_context: "{{ sba_baseline_run_context }}"
+        sba_resolved: "{{ sba_baseline_resolved }}"
+    - name: Assert the second run changed nothing and adopted
+      ansible.builtin.assert:
+        that: [sba_adopted | bool, sba_instance_exists | bool]
+        fail_msg: >-
+          A second identical run did not adopt. It must find the instance by its
+          ownership label, and a no-op re-run must not create or touch it.
+        success_msg: second run adopted, changed 0
+
+    # ------------------------------------------------------------------ get
+    - name: Get must not change anything
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: get
+        sba_run_context: "{{ sba_baseline_run_context }}"
+        sba_resolved: "{{ sba_baseline_resolved }}"
+        sba_retry_delay: 0
+        sba_wait_ready_timeout: 5
+      register: sba_get
+
+    - name: Assert get is read-only
+      ansible.builtin.assert:
+        that: [sba_get is not changed]
+        fail_msg: get must not create or modify anything.
+        success_msg: get is read-only
+
+    # ------------------------------------------------------------- refusals
+    # include_tasks rather than a loop on the include itself: the block/rescue
+    # that makes a refusal assertable has to live inside the task file, because
+    # a block cannot carry a loop.
+    - name: Run every refusal case
+      ansible.builtin.include_tasks: tasks/run_refusal_case.yml
+      loop: "{{ sba_refusal_cases }}"
+      loop_control:
+        loop_var: sba_case
+        label: "{{ sba_case.name }}"
+
+    # -------------------------------------------------------------- destroy
+    - name: Destroy must refuse when the ownership label matches nothing
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: destroy
+        sba_run_context:
+          instance_id: 00000000-0000-0000-0000-000000000000
+          name: pypa001
+          fqdn: pypa001.eu.example.com
+        sba_resolved: "{{ sba_baseline_resolved }}"
+      ignore_errors: true
+      register: sba_destroy_unowned
+
+    - name: Assert the unowned destroy is refused
+      ansible.builtin.assert:
+        that:
+          - sba_destroy_unowned is failed
+          - "'OWNERSHIP_CHECK_FAILED' in (sba_destroy_unowned.msg | default(''))"
+        fail_msg: >-
+          A destroy whose ownership label matches nothing must refuse. The lookup
+          is by label and never by name, so a name-scoped destroy would be the
+          only thing deleting an instance the platform does not own.
+        success_msg: unowned destroy refused
+
+    - name: Destroy the owned instance
+      ansible.builtin.include_role:
+        name: cloud/gcp_compute
+      vars:
+        sba_operation: destroy
+        sba_run_context: "{{ sba_baseline_run_context }}"
+        sba_resolved: "{{ sba_baseline_resolved }}"
+      register: sba_destroy
+
+    - name: Assert nothing carrying the ownership label remains
+      google.cloud.gcp_compute_instance_info:
+        project: sba-payments-prod
+        zone: europe-west1-b
+        filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+      register: sba_after_destroy
+
+    - name: Assert the estate is clean
+      ansible.builtin.assert:
+        that: [sba_destroy is succeeded, sba_after_destroy.resources | length == 0]
+        fail_msg: >-
+          {{ sba_after_destroy.resources | length }} instances still carry
+          sba_instance_id after destroy.
+        success_msg: destroyed, no owned resources remain

@@ -1,0 +1,10 @@
+---
+# F — Assert Hyper-V VM
+- name: Assert Hyper-V VM exists and has private IP
+  ansible.builtin.assert:
+    that:
+      - sba_facts.server.instance_id | length > 0
+      - sba_facts.network.private_ip | length > 0
+    fail_msg: "Hyper-V VM postcondition failed: missing instance_id or private_ip."
+    quiet: true
+  tags: [hyperv_vm, assert]

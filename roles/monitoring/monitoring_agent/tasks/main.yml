@@ -1,0 +1,41 @@
+---
+# Main tasks for roles/monitoring/monitoring_agent
+# Installs and enables the cloud monitoring agent based on provider
+
+- name: Configure GCP Ops Agent (Google Cloud Platform)
+  when: sba_monitoring_provider == 'gcp' and sba_enable_ops_agent | bool
+  block:
+    - name: Download Google Cloud Ops Agent repository setup script
+      ansible.builtin.get_url:
+        url: "{{ sba_ops_agent_repo_url }}"
+        dest: /tmp/add-google-cloud-ops-agent-repo.sh
+        mode: '0700'
+      tags: [monitoring, ops_agent]
+
+    - name: Add Google Cloud Ops Agent repository
+      ansible.builtin.command:
+        cmd: bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install
+      register: sba_ops_agent_install
+      changed_when: "'is already installed' not in sba_ops_agent_install.stdout"
+      tags: [monitoring, ops_agent]
+
+    - name: Clean up Ops Agent installer script
+      ansible.builtin.file:
+        path: /tmp/add-google-cloud-ops-agent-repo.sh
+        state: absent
+      tags: [monitoring, ops_agent]
+
+    - name: Ensure google-cloud-ops-agent service is started and enabled
+      ansible.builtin.service:
+        name: google-cloud-ops-agent
+        state: started
+        enabled: true
+      tags: [monitoring, ops_agent]
+
+- name: Verify monitoring agent status
+  ansible.builtin.command:
+    cmd: systemctl is-active google-cloud-ops-agent
+  register: sba_ops_agent_status
+  changed_when: false
+  when: sba_monitoring_provider == 'gcp'
+  tags: [monitoring, verify]

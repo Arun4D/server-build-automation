@@ -1,0 +1,47 @@
+---
+# F — assert_instance. The stage postconditions.
+#
+# Checked against the observed state rather than against what the role intended
+# to do. The stage wrapper rolls these up into the stage result document; the
+# role does not write that document itself.
+
+- name: F1 — Assert every provision postcondition
+  block:
+    - name: F1a — The instance exists and is tagged
+      ansible.builtin.assert:
+        that:
+          - sba_observed.resources | default([]) | length == 1
+          - sba_observed.resources[0].labels.sba_instance_id | default('') == sba_instance_id
+        fail_msg: >-
+          Postcondition failed: the instance is absent or does not carry
+          sba_instance_id={{ sba_instance_id }}. Code: POSTCONDITION_FAILED.
+        quiet: true
+      tags: [gcp_compute, assert]
+
+    - name: F1b — A private IP is assigned
+      ansible.builtin.assert:
+        that:
+          - sba_observed.resources[0].networkInterfaces | map(attribute='networkIP') | first | default('') | length > 0
+        fail_msg: >-
+          Postcondition failed: no private IP is assigned. Code:
+          POSTCONDITION_FAILED.
+        quiet: true
+      tags: [gcp_compute, assert]
+
+    - name: F1c — The applied image is the pinned image
+      ansible.builtin.assert:
+        that:
+          # Basename comparison, for the same reason as B3a: the API returns a
+          # self link and the contract carries a self link, but their prefixes
+          # can differ in form while naming the same image. The image *name* is
+          # the pinned value, and it is the name a family would have moved.
+          - sba_observed.resources[0].disks | selectattr('boot', 'defined') | map(attribute='source') | first | default('') | basename
+            == sba_image_self_link | basename
+        fail_msg: >-
+          Postcondition failed: the running image is
+          {{ sba_observed.resources[0].disks | selectattr('boot', 'defined') | map(attribute='source') | first | default('unknown') }},
+          not the pinned {{ sba_image_self_link }}. This is the reproducibility
+          check, and it is the one that catches a family or a moving reference.
+          Code: OS_VERSION_MISMATCH.
+        quiet: true
+      tags: [gcp_compute, assert]

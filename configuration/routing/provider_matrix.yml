@@ -1,0 +1,116 @@
+---
+# Central Provider Routing Matrix (docs/architecture/provider-abstraction.md)
+# Maps cloud_provider to its image resolver, provisioning role, stage playbooks,
+# required collections, and dynamic inventory connection strategy.
+
+providers:
+  gcp:
+    name: "Google Cloud Platform"
+    cloud_config: "configuration/clouds/gcp.yml"
+    image_resolver_role: "image/gcp_image"
+    provision_role: "cloud/gcp_compute"
+    provision_playbook: "playbooks/stages/provision_gcp.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "google.cloud"
+      - "ansible.posix"
+      - "community.general"
+      - "community.crypto"
+    inventory:
+      connection_type: "ssh"
+      default_user: "sba"
+      use_os_login: true
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  azure:
+    name: "Microsoft Azure"
+    cloud_config: "configuration/clouds/azure.yml"
+    image_resolver_role: "image/azure_image"
+    provision_role: "cloud/azure_vm"
+    provision_playbook: "playbooks/stages/provision_azure.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "azure.azcollection"
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      connection_type: "ssh"
+      default_user: "azureuser"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  aws:
+    name: "Amazon Web Services"
+    cloud_config: "configuration/clouds/aws.yml"
+    image_resolver_role: "image/aws_image"
+    provision_role: "cloud/aws_ec2"
+    provision_playbook: "playbooks/stages/provision_aws.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "amazon.aws"
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      connection_type: "ssh"
+      default_user: "ec2-user"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  vmware:
+    name: "VMware vSphere"
+    cloud_config: "configuration/clouds/vmware.yml"
+    image_resolver_role: "image/vmware_image"
+    provision_role: "cloud/vmware_vm"
+    provision_playbook: "playbooks/stages/provision_vmware.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "community.vmware"
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      connection_type: "ssh"
+      default_user: "ansible"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  hyperv:
+    name: "Microsoft Hyper-V"
+    cloud_config: "configuration/clouds/hyperv.yml"
+    image_resolver_role: "image/hyperv_image"
+    provision_role: "cloud/hyperv_vm"
+    provision_playbook: "playbooks/stages/provision_hyperv.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "community.windows"
+      - "ansible.windows"
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      connection_type: "ssh"
+      default_user: "ansible"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  nutanix:
+    name: "Nutanix AHV"
+    cloud_config: "configuration/clouds/nutanix.yml"
+    image_resolver_role: "image/nutanix_image"
+    provision_role: "cloud/nutanix_vm"
+    provision_playbook: "playbooks/stages/provision_nutanix.yml"
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    required_collections:
+      - "nutanix.ncp"
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      connection_type: "ssh"
+      default_user: "ansible"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"

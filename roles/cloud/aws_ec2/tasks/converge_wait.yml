@@ -1,0 +1,15 @@
+---
+# C — Converge and D — Wait for AWS EC2
+- name: Wait for EC2 instance to be running
+  amazon.aws.ec2_instance_info:
+    region: "{{ sba_region }}"
+    filters:
+      "tag:sba_instance_id": "{{ sba_instance_id }}"
+  register: sba_wait_aws
+  until: >-
+    sba_wait_aws.instances | default([]) | length > 0
+    and sba_wait_aws.instances[0].state.name == 'running'
+  retries: 30
+  delay: 10
+  changed_when: false
+  tags: [aws_ec2, wait]

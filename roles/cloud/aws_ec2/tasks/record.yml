@@ -1,0 +1,29 @@
+---
+# B (continued) — Read back EC2 observed state and record into sba_facts
+- name: Read back EC2 info
+  amazon.aws.ec2_instance_info:
+    region: "{{ sba_region }}"
+    filters:
+      "tag:sba_instance_id": "{{ sba_instance_id }}"
+  register: sba_observed_aws
+  changed_when: false
+  tags: [aws_ec2, record]
+
+- name: Record observed state into sba_facts
+  ansible.builtin.set_fact:
+    sba_facts:
+      server:
+        instance_id: "{{ sba_observed_aws.instances[0].instance_id | default('') }}"
+        state: "{{ sba_observed_aws.instances[0].state.name | default('running') }}"
+        private_ip: "{{ sba_observed_aws.instances[0].private_ip_address | default('') }}"
+        fqdn: "{{ sba_fqdn }}"
+      network:
+        private_ip: "{{ sba_observed_aws.instances[0].private_ip_address | default('') }}"
+        subnet_id: "{{ sba_observed_aws.instances[0].subnet_id | default('') }}"
+        vpc_id: "{{ sba_observed_aws.instances[0].vpc_id | default('') }}"
+      image:
+        applied_image_id: "{{ sba_observed_aws.instances[0].image_id | default('') }}"
+      tags:
+        applied: "{{ sba_observed_aws.instances[0].tags | default({}) }}"
+        verified: true
+  tags: [aws_ec2, record]

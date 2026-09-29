@@ -1,0 +1,10 @@
+---
+# E — Decommission AWS EC2 Instance
+- name: Terminate EC2 instance
+  amazon.aws.ec2_instance:
+    region: "{{ sba_region }}"
+    filters:
+      "tag:sba_instance_id": "{{ sba_instance_id }}"
+    state: terminated
+    wait: true
+  tags: [aws_ec2, destroy]

@@ -1,0 +1,27 @@
+---
+# Defaults for roles/cloud/vmware_vm
+
+sba_run_context: {}
+sba_resolved: {}
+
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+sba_vcenter_hostname: "{{ lookup('ansible.builtin.env', 'VMWARE_HOST', default='vcenter.corp.example.com') }}"
+sba_vcenter_username: "{{ lookup('ansible.builtin.env', 'VMWARE_USER', default='administrator@vsphere.local') }}"
+sba_vcenter_password: "{{ lookup('ansible.builtin.env', 'VMWARE_PASSWORD', default='placeholder') }}"
+sba_datacenter: "{{ sba_resolved.datacenter | default('DC1') }}"
+sba_cluster: "{{ sba_resolved.cluster | default('Cluster-01') }}"
+sba_datastore: "{{ sba_resolved.datastore | default('vsanDatastore') }}"
+sba_folder: "{{ sba_resolved.folder | default('Discovered virtual machine') }}"
+sba_network: "{{ sba_resolved.network | default('VM Network') }}"
+
+sba_num_cpus: "{{ sba_resolved.cpus | default(4) | int }}"
+sba_memory_mb: "{{ sba_resolved.memory_mb | default(8192) | int }}"
+sba_template_name: "{{ sba_resolved.image.template_name | default('') }}"
+
+sba_custom_values:
+  sba_instance_id: "{{ sba_instance_id }}"
+
+sba_operation: provision

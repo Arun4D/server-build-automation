@@ -1,0 +1,31 @@
+---
+# Main entrypoint for roles/cloud/azure_vm
+- name: Provision Azure Virtual Machine
+  when: sba_operation == 'provision'
+  block:
+    - name: Run preflight and lookup
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [azure_vm, provision, preflight]
+
+    - name: Create or adopt
+      ansible.builtin.import_tasks: create.yml
+      tags: [azure_vm, provision, create]
+
+    - name: Read back and record
+      ansible.builtin.import_tasks: record.yml
+      tags: [azure_vm, provision, record]
+
+    - name: Converge and wait
+      ansible.builtin.import_tasks: converge_wait.yml
+      tags: [azure_vm, provision, wait]
+
+    - name: Assert postconditions
+      ansible.builtin.import_tasks: assert.yml
+      tags: [azure_vm, provision, assert]
+
+- name: Destroy Azure Virtual Machine
+  when: sba_operation == 'destroy'
+  block:
+    - name: Decommission VM
+      ansible.builtin.import_tasks: destroy.yml
+      tags: [azure_vm, destroy]

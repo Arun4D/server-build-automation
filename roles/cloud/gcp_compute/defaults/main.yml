@@ -1,0 +1,154 @@
+---
+# Defaults for the GCP provider role.
+#
+# The sba_ prefix marks a platform-contract variable. The role contract
+# (docs/architecture/role-dependency-model.md section 3.1) is identical across
+# providers, so a variable name that appears here and in aws_ec2 or azure_vm
+# with different meaning is a contract break, not an implementation detail.
+#
+# Infrastructure values are NOT defaulted here. A project, a zone, a network
+# or a machine type is resolved data, and a default would be a hard-coded
+# infrastructure value, which the CI grep gate in section 9 of the role
+# standards rejects. If a required value is missing, preflight fails naming it.
+
+# --- required, no default: the run context ----------------------------------
+# The role reads the resolved run context and takes the platform contract from
+# it. Nothing below re-derives any of this.
+sba_run_context: {}
+sba_resolved: {}
+
+# The golden join key. Populated from the run context so a caller cannot pass
+# a different value and orphan an instance outside the run's IAM condition.
+sba_instance_id: "{{ sba_run_context.instance_id | default('') }}"
+
+# Short name, the GCP resource name and the guest hostname. GCP requires
+# lowercase, so an uppercase name is a resolution error rather than something
+# the role lowercases: silently lowercasing would create a resource the
+# requester did not ask for under a name they cannot predict.
+sba_name: "{{ sba_run_context.name | default('') }}"
+sba_fqdn: "{{ sba_run_context.fqdn | default('') }}"
+
+# --- provider coordinates ----------------------------------------------------
+sba_project: "{{ sba_resolved.project | default('') }}"
+sba_region: "{{ sba_resolved.region | default('') }}"
+sba_zone: "{{ sba_resolved.zone | default('') }}"
+sba_machine_type: "{{ sba_resolved.machine_type | default('') }}"
+
+# The catalogue may supply either a short machine type or a zone-qualified one.
+# GCP requires the fully qualified form, so a short name is qualified here with
+# the resolved zone. If it arrives already qualified it is left alone, because
+# double-qualifying produces a path with two machine types in it and a 400 that
+# reads as though the machine type were invalid.
+#
+# Derived from sba_resolved directly rather than from sba_machine_type above.
+# Chaining defaults works inside a role, where each is resolved in file order,
+# but it breaks the moment the file is read by anything that is not a role:
+# include_vars, a unit test, or a linter resolving the templates one at a time.
+# A default that can only be read in one context is a default that cannot be
+# tested in isolation.
+sba_machine_type_qualified: >-
+  {{
+    sba_resolved.machine_type | default('')
+    if '/' in (sba_resolved.machine_type | default(''))
+    else (sba_resolved.zone | default('')) ~ '/' ~ (sba_resolved.machine_type | default(''))
+    if sba_resolved.zone | default('')
+    else sba_resolved.machine_type | default('')
+  }}
+
+# --- networking --------------------------------------------------------------
+# Referenced, never created. A firewall rule, a subnet or a Cloud NAT
+# allocation is a network change with its own review cycle, and a build that
+# created one could exhaust the subnet's address range for everything else in
+# the network.
+sba_network: "{{ sba_resolved.network | default('') }}"
+sba_subnet: "{{ sba_resolved.subnet | default('') }}"
+
+# The role has no path to an external IP. Not a default: an omission that a
+# caller cannot turn on. sba_allow_external_ip exists so the policy exception
+# is a visible, reviewed edit to this file rather than a task parameter, and
+# when it is set the role still requires an explicit justification string, so
+# an external IP cannot appear without a recorded reason.
+sba_allow_external_ip: false
+sba_external_ip_justification: ""
+
+# --- identity ----------------------------------------------------------------
+# A NAME, never a value (AD-15). The platform reads the key at run time.
+sba_identity_ref: "{{ sba_resolved.identity_ref | default('') }}"
+sba_service_account_email: "{{ sba_resolved.service_account_email | default('') }}"
+sba_scopes:
+  - https://www.googleapis.com/auth/devstorage.read_only
+  - https://www.googleapis.com/auth/logging.write
+  - https://www.googleapis.com/auth/monitoring.write
+
+# --- image -------------------------------------------------------------------
+# A pinned self link. Never a family, never "latest": a moving reference makes
+# a no-op re-run report OS_VERSION_MISMATCH, because the idempotency check
+# compares the instance's current image against the recorded one.
+sba_image_self_link: "{{ sba_resolved.image.self_link | default('') }}"
+sba_image_reference: "{{ sba_resolved.image.reference | default('') }}"
+
+# --- metadata ----------------------------------------------------------------
+# Split by the AD-11 asymmetry. Labels go in the create call because they must
+# be present at creation for per-run least privilege to bind, and they cannot
+# be changed afterwards without a stop and start. Annotations go in
+# immediately after because they are freely mutable and unbounded.
+#
+# sba_instance_id is asserted present in labels during preflight, not merged in
+# here, so a missing key is a named failure instead of a silent repair.
+sba_labels: "{{ sba_resolved.labels | default({}) }}"
+sba_annotations: "{{ sba_resolved.annotations | default({}) }}"
+
+# Metadata the instance reads at boot. enable-oslogin and
+# block-project-ssh-keys are the GCP access model: no key files, no
+# project-wide keys, OS Login instead. A platform that also distributed key
+# files would have two mechanisms and one of them would be the weaker.
+sba_instance_metadata:
+  enable-oslogin: "TRUE"
+  block-project-ssh-keys: "true"
+  # The startup script is platform-rendered from a reviewed catalogue entry. It
+  # is never a requester-supplied value: GCP metadata is a plain-text key/value
+  # store the instance can read, so an arbitrary value there is an arbitrary
+  # startup script on a production server.
+  startup-script: "{{ sba_startup_script | default('') }}"
+
+# Key/value pairs to place under metadata.items, written as keys rather than as
+# a flat dict because GCP's metadata store is a list of pairs, not a mapping.
+# Empty by default: a build that ships no startup script is the normal case,
+# and this is here so the shape is documented rather than so it is populated.
+sba_metadata_items: []
+
+# --- storage and encryption --------------------------------------------------
+sba_root_volume_size_gb: "{{ sba_resolved.root_volume_size_gb | default(0) | int }}"
+sba_root_volume_type: "{{ sba_resolved.root_volume_type | default('pd-balanced') }}"
+sba_data_volumes: "{{ sba_resolved.data_volumes | default([]) }}"
+
+# CMEK, a Cloud KMS key version resource name. Omit when the catalogue does not
+# require customer-managed encryption, which is the common case.
+sba_cmek_key: "{{ sba_resolved.encryption_key_id | default('') }}"
+
+# --- guest features ----------------------------------------------------------
+# SEV requires a machine type that supports it and a pd-ssd boot disk. A
+# catalogue entry that requests SEV for an unsupported type must fail at
+# resolution; the role checks rather than trusts, because the API error for
+# this is a generic INVALID_ARGUMENT that does not name the real cause.
+sba_guest_os_features: "{{ sba_resolved.guest_os_features | default([]) }}"
+
+# Shielded VM: Secure Boot and vTPM. Per catalogue entry, not globally, because
+# not every machine type supports both.
+sba_shielded_vm: "{{ sba_resolved.shielded_vm | default(false) | bool }}"
+
+# --- behaviour ---------------------------------------------------------------
+# From the provider role contract section 2.2, identical across providers.
+sba_retry_attempts: 3
+sba_retry_delay: 5
+sba_delete_timeout: 1800
+sba_wait_ready_timeout: 3600
+
+# False always, and not configurable. destroy must be able to remove the
+# instance; a run that cannot clean up after a partial failure leaves
+# untracked resources carrying this run's labels.
+sba_deletion_protection: false
+
+# The user-facing operation. Closed by the caller, not branched on freely: the
+# role maps each of these to a fixed task sequence.
+sba_operation: provision

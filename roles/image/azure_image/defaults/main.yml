@@ -1,0 +1,8 @@
+---
+# Defaults for roles/image/azure_image
+sba_catalog_image: {}
+sba_image_publisher: "{{ sba_catalog_image.publisher | default('') }}"
+sba_image_offer: "{{ sba_catalog_image.offer | default('') }}"
+sba_image_sku: "{{ sba_catalog_image.sku | default('') }}"
+sba_image_version: "{{ sba_catalog_image.version | default('') }}"
+sba_image_verified: false

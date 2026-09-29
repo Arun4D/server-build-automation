@@ -1,0 +1,25 @@
+---
+# A — Preflight and Lookup for Azure VM
+- name: A1 — Assert platform contract coordinates
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | length > 0
+      - sba_name | length > 0
+      - sba_resource_group | length > 0
+      - sba_location | length > 0
+    fail_msg: "Azure contract missing instance_id, name, resource_group, or location."
+    quiet: true
+  tags: [azure_vm, contract]
+
+- name: A2 — Check if VM already exists
+  azure.azcollection.azure_rm_virtualmachine_info:
+    resource_group: "{{ sba_resource_group }}"
+    name: "{{ sba_name }}"
+  register: sba_azure_vm_check
+  changed_when: false
+  tags: [azure_vm, lookup]
+
+- name: A3 — Record instance existence
+  ansible.builtin.set_fact:
+    sba_instance_exists: "{{ (sba_azure_vm_check.vms | default([]) | length) > 0 }}"
+  tags: [azure_vm, lookup]
