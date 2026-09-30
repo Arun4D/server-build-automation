@@ -21,7 +21,7 @@
 
     - name: Execute Azure provisioning role
       ansible.builtin.include_role:
-        name: cloud/azure_vm
+        name: provider/azure_vm
       vars:
         sba_operation: provision
         sba_resolved: "{{ sba_run_context.resolved }}"

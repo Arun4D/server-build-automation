@@ -1,5 +1,5 @@
 ---
-# Main entrypoint for roles/cloud/aws_ec2
+# Main entrypoint for roles/provider/aws_ec2
 - name: Provision AWS EC2 Instance
   when: sba_operation == 'provision'
   block:

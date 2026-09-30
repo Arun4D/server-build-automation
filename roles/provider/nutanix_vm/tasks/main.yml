@@ -1,5 +1,5 @@
 ---
-# Main entrypoint for roles/cloud/nutanix_vm
+# Main entrypoint for roles/provider/nutanix_vm
 - name: Provision Nutanix Virtual Machine
   when: sba_operation == 'provision'
   block:

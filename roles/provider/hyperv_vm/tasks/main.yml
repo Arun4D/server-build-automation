@@ -1,5 +1,5 @@
 ---
-# Main entrypoint for roles/cloud/hyperv_vm
+# Main entrypoint for roles/provider/hyperv_vm
 - name: Provision Hyper-V Virtual Machine
   when: sba_operation == 'provision'
   block:

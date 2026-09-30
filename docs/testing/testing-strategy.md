@@ -273,7 +273,7 @@ passes every functional test and breaks `R-08`.
 Container-based, so they run on any PR without a cloud account.
 
 ```yaml
-# roles/cloud/azure_vm/molecule/default/converge.yml
+# roles/provider/azure_vm/molecule/default/converge.yml
 - name: Provision
   ansible.builtin.include_role:
     name: sba.cloud.azure_vm

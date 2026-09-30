@@ -1,5 +1,5 @@
 ---
-# Main entrypoint for roles/cloud/azure_vm
+# Main entrypoint for roles/provider/azure_vm
 - name: Provision Azure Virtual Machine
   when: sba_operation == 'provision'
   block:

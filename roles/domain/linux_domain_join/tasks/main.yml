@@ -3,7 +3,16 @@
 # Robust Active Directory Domain Join with preflight, idempotency, and rescue blocks
 
 - name: Execute Active Directory Domain Join
+  when: sba_domain_join_enabled | bool
   block:
+    - name: Require a directory join credential
+      ansible.builtin.assert:
+        that:
+          - sba_ad_join_password | length > 0
+        fail_msg: "SBA_AD_JOIN_PASSWORD must be supplied by the runtime secret store for a domain join."
+        quiet: true
+      no_log: true
+
     - name: Install required domain-join packages (RedHat)
       ansible.builtin.dnf:
         name: "{{ sba_ad_packages['RedHat'] }}"

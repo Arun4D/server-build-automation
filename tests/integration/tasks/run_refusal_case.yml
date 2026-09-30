@@ -15,7 +15,7 @@
   block:
     - name: Run the role, which is expected to refuse
       ansible.builtin.include_role:
-        name: cloud/gcp_compute
+        name: provider/gcp_compute
       vars:
         sba_operation: "{{ sba_case.operation | default('provision') }}"
         sba_run_context: "{{ sba_case.run_context }}"

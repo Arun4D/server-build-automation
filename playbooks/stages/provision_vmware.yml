@@ -21,7 +21,7 @@
 
     - name: Execute VMware provisioning role
       ansible.builtin.include_role:
-        name: cloud/vmware_vm
+        name: provider/vmware_vm
       vars:
         sba_operation: provision
         sba_resolved: "{{ sba_run_context.resolved }}"

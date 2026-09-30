@@ -1,5 +1,5 @@
 ---
-# Defaults for roles/cloud/nutanix_vm
+# Defaults for roles/provider/nutanix_vm
 
 sba_run_context: {}
 sba_resolved: {}

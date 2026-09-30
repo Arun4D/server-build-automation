@@ -442,7 +442,7 @@ not by a cloud API error 20 minutes later.
 ### 7.5 Portability
 
 The only provider-specific content is: `configuration/clouds/<cloud>.yml` (data), and
-`roles/cloud/*_vm` + `roles/image/*_image` (code). Everything else — stages, resolver, policy,
+`roles/provider/*_vm` + `roles/image/*_image` (code). Everything else — stages, resolver, policy,
 naming, tagging mapper, result model — is provider-neutral. Adding a cloud means: one config
 file, two roles, one enum entry, one inventory plugin entry. The cost of adding Azure is
 therefore visible and bounded, which is what makes the abstraction real rather than aspirational.

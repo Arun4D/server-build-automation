@@ -21,7 +21,7 @@
 
     - name: Execute Hyper-V provisioning role
       ansible.builtin.include_role:
-        name: cloud/hyperv_vm
+        name: provider/hyperv_vm
       vars:
         sba_operation: provision
         sba_resolved: "{{ sba_run_context.resolved }}"

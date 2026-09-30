@@ -14,36 +14,43 @@
     - name: Stage 2.1 — Apply Linux OS Baseline
       ansible.builtin.import_role:
         name: os/linux_baseline
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('os/linux_baseline' in (sba_post_provision_roles | default([])))"
       tags: [post_build, baseline]
 
     - name: Stage 2.2 — Join Server to Active Directory Domain
       ansible.builtin.import_role:
         name: domain/linux_domain_join
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('domain/linux_domain_join' in (sba_post_provision_roles | default([])))"
       tags: [post_build, domain_join]
 
     - name: Stage 2.3 — Apply CIS Benchmark Security Hardening
       ansible.builtin.import_role:
         name: security/cis_linux
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('security/cis_linux' in (sba_post_provision_roles | default([])))"
       tags: [post_build, cis]
 
     - name: Stage 2.4 — Install Enterprise Monitoring Agent
       ansible.builtin.import_role:
         name: monitoring/monitoring_agent
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('monitoring/monitoring_agent' in (sba_post_provision_roles | default([])))"
       tags: [post_build, monitoring]
 
     - name: Stage 2.5 — Install Enterprise Security / EDR Agent
       ansible.builtin.import_role:
         name: security/security_agent
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('security/security_agent' in (sba_post_provision_roles | default([])))"
       tags: [post_build, security_agent]
 
     - name: Stage 2.6 — Perform DNS Registration
       ansible.builtin.import_role:
         name: dns/dns_registration
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('dns/dns_registration' in (sba_post_provision_roles | default([])))"
       tags: [post_build, dns]
 
     - name: Stage 2.7 — Register Server in ServiceNow CMDB
       ansible.builtin.import_role:
         name: cmdb/servicenow_cmdb
+      when: "(sba_post_provision_roles | default([]) | length == 0) or ('cmdb/servicenow_cmdb' in (sba_post_provision_roles | default([])))"
       tags: [post_build, cmdb]
 
     - name: Stage 2.8 — Emit Stage 2 Completion Fact

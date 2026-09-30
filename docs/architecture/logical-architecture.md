@@ -130,9 +130,9 @@ credential boundary, not on convenience.
 
 | Component | Responsibility | Provider-specific? |
 |---|---|---|
-| `cloud/azure_vm` | Create/get/validate/destroy/tag an Azure VM, NIC, NSG association, availability set/zones | Yes |
-| `cloud/aws_ec2` | Create/get/validate/destroy/tag an EC2 instance, ENI, SG association, placement | Yes |
-| `cloud/gcp_compute` | Create/get/validate/destroy/label a Compute Engine instance, NIC, firewall association | Yes |
+| `provider/azure_vm` | Create/get/validate/destroy/tag an Azure VM, NIC, NSG association, availability set/zones | Yes |
+| `provider/aws_ec2` | Create/get/validate/destroy/tag an EC2 instance, ENI, SG association, placement | Yes |
+| `provider/gcp_compute` | Create/get/validate/destroy/label a Compute Engine instance, NIC, firewall association | Yes |
 | `image/azure_image` | Resolve a catalogue entry to a Shared Image Version reference | Yes |
 | `image/aws_image` | Resolve a catalogue entry to an AMI id (pinned, or tag query recorded) | Yes |
 | `image/gcp_image` | Resolve a catalogue entry to a GCP image reference | Yes |
@@ -317,7 +317,7 @@ possible without a shared engine, because the interface is a file format, not an
 
 | Anti-pattern | Why it is rejected | Correct alternative |
 |---|---|---|
-| Cloud module name outside `roles/cloud/*` and `roles/image/*` | [R-08](enterprise-architecture.md#9-architecture-risk-register): the abstraction rots the first time one is allowed | Provider role, or extend the role contract |
+| Cloud module name outside `roles/provider/*` and `roles/image/*` | [R-08](enterprise-architecture.md#9-architecture-risk-register): the abstraction rots the first time one is allowed | Provider role, or extend the role contract |
 | `when: cloud == 'azure'` in a stage playbook | Same | A provider capability flag from the resolver |
 | A stage calling another stage's roles directly | Couples stages; breaks re-entry | Communicate via `result.<stage>.json` |
 | Adapter containing a stage list | Reintroduces duplication ([AD-01](architectural-decisions.md#ad-01-single-entry-playbooks--staged-re-entry)) | `server_build.yml` owns the stage list |
@@ -336,7 +336,7 @@ How each likely extension is absorbed without modifying existing content.
 
 | Extension | Change required | Files touched | Existing content modified? |
 |---|---|---|---|
-| New cloud (e.g. OCI, VMware) | 2 roles + 1 config file + 1 enum entry + 1 inventory plugin entry | `roles/cloud/*`, `roles/image/*`, `configuration/clouds/`, resolver enum | No |
+| New cloud (e.g. OCI, VMware) | 2 roles + 1 config file + 1 enum entry + 1 inventory plugin entry | `roles/provider/*`, `roles/image/*`, `configuration/clouds/`, resolver enum | No |
 | New engine (Jenkins, Argo) | 1 adapter | `automation/<engine>/` | No |
 | New OS family (Solaris, AIX) | 1 baseline role + 1 os config file | `roles/os/`, `configuration/os/` | No |
 | New server role (e.g. `kafka`) | 1 config file | `configuration/server_roles/kafka.yml` | No |

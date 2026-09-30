@@ -143,7 +143,7 @@ Three rules:
    invisible later.
 
 ```
-roles/cloud/azure_vm/
+roles/provider/azure_vm/
 ├── tasks/
 │   ├── main.yml              The six task groups [provider-abstraction.md §2]
 │   ├── preflight.yml
@@ -383,7 +383,7 @@ last-write-wins would let a lock bug pass every test.
 
 | Rule | Enforced by |
 |---|---|
-| A cloud module call only in `roles/cloud/` or `roles/image/` | CI gate |
+| A cloud module call only in `roles/provider/` or `roles/image/` | CI gate |
 | A hard-coded subscription, VNet, subnet, image or OU ID only in `configuration/regions/` or `clouds/` | CI gate |
 | A secret only in the credential store, never in `configuration/`, `schemas/`, `workflows/`, `inventories/` | gitleaks + a CI gate |
 | Playbook logic in `playbooks/`, never in a role's `tasks/main.yml` | Review |

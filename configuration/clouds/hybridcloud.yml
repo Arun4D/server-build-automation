@@ -1,0 +1,8 @@
+---
+# Inventory-managed hybrid-cloud configuration. This profile never provisions
+# a VM itself; it applies the Linux post-build workflow to approved inventory.
+provider: hybridcloud
+name: Hybrid Cloud
+defaults:
+  provisioning_mode: inventory_only
+  allow_external_ip: false

@@ -113,7 +113,7 @@
       "required": ["cloud_role", "image_role", "tag_mapper"],
       "properties": {
         "cloud_role": {
-          "description": "The instance lifecycle role. Present in roles/cloud/, and statically named in the playbook's import_role list; the playbook branches on this value with a when guard rather than performing a dynamic include.",
+          "description": "The instance lifecycle role. Present in roles/provider/, and statically named in the playbook's import_role list; the playbook branches on this value with a when guard rather than performing a dynamic include.",
           "type": "string",
           "const": "gcp_compute"
         },

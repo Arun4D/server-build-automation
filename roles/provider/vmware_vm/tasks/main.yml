@@ -1,5 +1,5 @@
 ---
-# Main entrypoint for roles/cloud/vmware_vm
+# Main entrypoint for roles/provider/vmware_vm
 - name: Provision VMware Virtual Machine
   when: sba_operation == 'provision'
   block:

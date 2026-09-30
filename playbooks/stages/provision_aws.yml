@@ -21,7 +21,7 @@
 
     - name: Execute AWS provisioning role
       ansible.builtin.include_role:
-        name: cloud/aws_ec2
+        name: provider/aws_ec2
       vars:
         sba_operation: provision
         sba_resolved: "{{ sba_run_context.resolved }}"

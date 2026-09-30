@@ -20,7 +20,7 @@ keeps the abstraction from eroding.
 | Family | Path | Runs against | May depend on | Count |
 |---|---|---|---|---|
 | **P — Platform** | `roles/platform/` | The controller (`localhost`) | Nothing (or other P roles) | 10 |
-| **C — Cloud provider** | `roles/cloud/`, `roles/image/` | The controller | P only | 6 |
+| **C — Cloud provider** | `roles/provider/`, `roles/image/` | The controller | P only | 6 |
 | **O — OS baseline** | `roles/os/` | A managed host | P only | 2 |
 | **B — Post-build** | `roles/domain/`, `monitoring/`, `security/`, `backup/`, `dns/`, `cmdb/` | A managed host, or the controller for the CMDB role | P only | 12 |
 | **S — Stage wrapper** | `roles/stage/` | The controller | P, C, O, B — and *only* in the declared order | 9 |
@@ -60,9 +60,9 @@ out of playbooks (§31: no giant playbook) and independently testable.
 
 | Role | Operations | Runs against |
 |---|---|---|
-| `cloud/azure_vm` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
-| `cloud/aws_ec2` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
-| `cloud/gcp_compute` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
+| `provider/azure_vm` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
+| `provider/aws_ec2` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
+| `provider/gcp_compute` | `provision`, `get`, `validate`, `destroy`, `tag` | Controller |
 | `image/azure_image` | `get_image` | Controller |
 | `image/aws_image` | `get_image` | Controller |
 | `image/gcp_image` | `get_image` | Controller |
@@ -183,7 +183,7 @@ the platform's own, immutable, authoritative record
 Checklist. Anything not on it is a sign the abstraction has a hole.
 
 ```
-  [ ] roles/cloud/<provider>_vm      implements all 5 operations
+  [ ] roles/provider/<provider>_vm      implements all 5 operations
   [ ] roles/image/<provider>_image   implements get_image
   [ ] configuration/clouds/<cloud>.yml  with region_map, identity ref, TagMapper case
   [ ] closed dispatch map           entry for the provider, in the resolver

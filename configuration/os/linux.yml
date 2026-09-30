@@ -1,0 +1,14 @@
+---
+# Linux build policy selected by the provider routing matrix. Secrets and
+# environment-specific directory values are resolved into the run context.
+os_family: linux
+supported_images:
+  - rhel_9
+  - ubuntu_2204
+post_provision:
+  domain_join: true
+  cis_hardening: true
+  monitoring: true
+  security_agent: true
+  dns_registration: true
+  cmdb_registration: true

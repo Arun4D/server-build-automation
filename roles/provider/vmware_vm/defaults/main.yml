@@ -1,5 +1,5 @@
 ---
-# Defaults for roles/cloud/vmware_vm
+# Defaults for roles/provider/vmware_vm
 
 sba_run_context: {}
 sba_resolved: {}

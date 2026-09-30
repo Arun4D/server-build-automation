@@ -168,7 +168,7 @@ understood, and `azure.azcollection` is the most mature of the three.
 | `playbooks/stages/provision.yml` + 10 more | The stage wrappers |
 | `playbooks/server_destroy.yml` | The governed teardown |
 | `roles/platform/validate_request`, `policy_gate`, `image_resolver` | |
-| `roles/cloud/azure_vm`, `roles/image/azure_image` | The full [contract](architecture/provider-abstraction.md#2-the-role-contract) |
+| `roles/provider/azure_vm`, `roles/image/azure_image` | The full [contract](architecture/provider-abstraction.md#2-the-role-contract) |
 | `roles/dns/dns_registration` | Forward and PTR, per-host |
 | `roles/cmdb/servicenow_cmdb` | The CI upsert by `sba_instance_id` |
 | `.github/workflows/server-build.yml` | The GitHub Actions runtime path |
@@ -270,8 +270,8 @@ hit an organisation-specific constraint.
 
 | Item | Detail |
 |---|---|
-| `roles/cloud/aws_ec2`, `roles/image/aws_image` | The full contract |
-| `roles/cloud/gcp_compute`, `roles/image/gcp_image` | Including the labels/annotations split |
+| `roles/provider/aws_ec2`, `roles/image/aws_image` | The full contract |
+| `roles/provider/gcp_compute`, `roles/image/gcp_image` | Including the labels/annotations split |
 | `configuration/clouds/aws.yml`, `gcp.yml` | Capability declarations |
 | `configuration/regions/` | Per-provider region files |
 | `tests/` | Contract, parity, and idempotence tests per provider |

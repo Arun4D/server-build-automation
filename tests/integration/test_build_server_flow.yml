@@ -29,7 +29,7 @@
     - name: Assert GCP provider mappings
       ansible.builtin.assert:
         that:
-          - matrix.providers.gcp.provision_role == "cloud/gcp_compute"
+          - matrix.providers.gcp.provision_role == "provider/gcp_compute"
           - matrix.providers.gcp.image_resolver_role == "image/gcp_image"
           - matrix.providers.gcp.post_build_playbook == "playbooks/post_build/linux_post_build.yml"
           - "'google.cloud' in matrix.providers.gcp.required_collections"

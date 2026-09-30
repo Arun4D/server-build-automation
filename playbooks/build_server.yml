@@ -47,7 +47,35 @@
           Cloud provider '{{ sba_provider_name }}' is not configured in provider matrix.
           Supported providers: {{ sba_matrix.providers.keys() | list }}.
 
-    - name: 1.6 — Resolve OS Image from Provider Image Registry
+    - name: 1.6 — Restrict this build workflow to Linux
+      ansible.builtin.assert:
+        that:
+          - sba_resolved.os_family | default("linux") | lower == "linux"
+          - "'linux' in (sba_provider_spec.supported_os | default(['linux']))"
+        fail_msg: >-
+          This workflow provisions Linux only. Provider {{ sba_provider_name }}
+          does not support the requested OS family.
+        quiet: true
+      tags: [provision, validate]
+
+    - name: 1.7 — Read GCP Linux image repository
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../{{ sba_provider_spec.image_catalog }}"
+        name: sba_linux_image_repository
+      when: sba_provider_name == "gcp"
+      tags: [provision, image]
+
+    - name: 1.8 — Verify GCP image is approved in the image repository
+      ansible.builtin.assert:
+        that:
+          - sba_resolved.image.catalog_id in (sba_linux_image_repository.linux_images | dict2items | map(attribute="value.gcp.catalog_id") | list)
+        fail_msg: >-
+          Image {{ sba_resolved.image.catalog_id | default("<missing>") }} is not an approved GCP Linux image.
+        quiet: true
+      when: sba_provider_name == "gcp"
+      tags: [provision, image]
+
+    - name: 1.9 — Resolve OS Image from Provider Image Registry
       ansible.builtin.include_role:
         name: "{{ sba_provider_spec.image_resolver_role }}"
       vars:
@@ -75,9 +103,9 @@
       ansible.builtin.add_host:
         name: "{{ sba_facts.server.fqdn | default(sba_fqdn) }}"
         groups:
-          - target_servers
-          - linux_servers
-          - "{{ sba_provider_name }}_servers"
+          - "{{ sba_provider_spec.inventory.target_group }}"
+          - "{{ sba_provider_spec.inventory.linux_group }}"
+          - "{{ sba_provider_spec.inventory.provider_group }}"
         ansible_host: "{{ sba_facts.network.private_ip }}"
         ansible_user: "{{ sba_resolved.ansible_user | default(sba_provider_spec.inventory.default_user) }}"
         ansible_ssh_common_args: "{{ sba_provider_spec.inventory.ssh_args }}"
@@ -85,6 +113,7 @@
         sba_facts: "{{ sba_facts }}"
         sba_run_context: "{{ sba_run_context }}"
         sba_resolved: "{{ sba_resolved }}"
+        sba_post_provision_roles: "{{ sba_provider_spec.post_provision_roles | default([]) }}"
       tags: [inventory]
 
     - name: 1.10 — Wait for SSH Port on Target Server

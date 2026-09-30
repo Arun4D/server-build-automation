@@ -6,9 +6,23 @@
 providers:
   gcp:
     name: "Google Cloud Platform"
+    # GCP is the managed Linux build path implemented in this repository.
+    supported_os: [linux]
+    provisioning_mode: managed
+    os_config: "configuration/os/linux.yml"
+    image_catalog: "configuration/images/linux_images.yml"
+    image_catalog_key: gcp
+    post_provision_roles:
+      - "os/linux_baseline"
+      - "domain/linux_domain_join"
+      - "security/cis_linux"
+      - "monitoring/monitoring_agent"
+      - "security/security_agent"
+      - "dns/dns_registration"
+      - "cmdb/servicenow_cmdb"
     cloud_config: "configuration/clouds/gcp.yml"
     image_resolver_role: "image/gcp_image"
-    provision_role: "cloud/gcp_compute"
+    provision_role: "provider/gcp_compute"
     provision_playbook: "playbooks/stages/provision_gcp.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -17,6 +31,9 @@ providers:
       - "community.general"
       - "community.crypto"
     inventory:
+      target_group: "target_servers"
+      linux_group: "linux_servers"
+      provider_group: "gcp_servers"
       connection_type: "ssh"
       default_user: "sba"
       use_os_login: true
@@ -28,7 +45,7 @@ providers:
     name: "Microsoft Azure"
     cloud_config: "configuration/clouds/azure.yml"
     image_resolver_role: "image/azure_image"
-    provision_role: "cloud/azure_vm"
+    provision_role: "provider/azure_vm"
     provision_playbook: "playbooks/stages/provision_azure.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -46,7 +63,7 @@ providers:
     name: "Amazon Web Services"
     cloud_config: "configuration/clouds/aws.yml"
     image_resolver_role: "image/aws_image"
-    provision_role: "cloud/aws_ec2"
+    provision_role: "provider/aws_ec2"
     provision_playbook: "playbooks/stages/provision_aws.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -64,7 +81,7 @@ providers:
     name: "VMware vSphere"
     cloud_config: "configuration/clouds/vmware.yml"
     image_resolver_role: "image/vmware_image"
-    provision_role: "cloud/vmware_vm"
+    provision_role: "provider/vmware_vm"
     provision_playbook: "playbooks/stages/provision_vmware.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -82,7 +99,7 @@ providers:
     name: "Microsoft Hyper-V"
     cloud_config: "configuration/clouds/hyperv.yml"
     image_resolver_role: "image/hyperv_image"
-    provision_role: "cloud/hyperv_vm"
+    provision_role: "provider/hyperv_vm"
     provision_playbook: "playbooks/stages/provision_hyperv.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -101,7 +118,7 @@ providers:
     name: "Nutanix AHV"
     cloud_config: "configuration/clouds/nutanix.yml"
     image_resolver_role: "image/nutanix_image"
-    provision_role: "cloud/nutanix_vm"
+    provision_role: "provider/nutanix_vm"
     provision_playbook: "playbooks/stages/provision_nutanix.yml"
     post_build_playbook: "playbooks/post_build/linux_post_build.yml"
     required_collections:
@@ -109,6 +126,38 @@ providers:
       - "ansible.posix"
       - "community.general"
     inventory:
+      connection_type: "ssh"
+      default_user: "ansible"
+      gather_facts: true
+      python_interpreter: "/usr/bin/python3"
+      ssh_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  # Hybrid-cloud targets are supplied by an approved inventory. There is no
+  # generic create operation; the route exists for the Linux post-build plan.
+  hybridcloud:
+    name: "Hybrid Cloud (inventory managed)"
+    supported_os: [linux]
+    provisioning_mode: inventory_only
+    cloud_config: "configuration/clouds/hybridcloud.yml"
+    os_config: "configuration/os/linux.yml"
+    image_catalog: "configuration/images/linux_images.yml"
+    image_catalog_key: hybridcloud
+    post_build_playbook: "playbooks/post_build/linux_post_build.yml"
+    post_provision_roles:
+      - "os/linux_baseline"
+      - "domain/linux_domain_join"
+      - "security/cis_linux"
+      - "monitoring/monitoring_agent"
+      - "security/security_agent"
+      - "dns/dns_registration"
+      - "cmdb/servicenow_cmdb"
+    required_collections:
+      - "ansible.posix"
+      - "community.general"
+    inventory:
+      target_group: "target_servers"
+      linux_group: "linux_servers"
+      provider_group: "hybridcloud_servers"
       connection_type: "ssh"
       default_user: "ansible"
       gather_facts: true

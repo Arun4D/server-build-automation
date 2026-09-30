@@ -1,5 +1,5 @@
 ---
-# Defaults for roles/cloud/aws_ec2
+# Defaults for roles/provider/aws_ec2
 
 sba_run_context: {}
 sba_resolved: {}

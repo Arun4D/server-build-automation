@@ -44,7 +44,7 @@
     # third does not leave the first two unrecorded.
     - name: Provision each instance
       ansible.builtin.include_role:
-        name: cloud/gcp_compute
+        name: provider/gcp_compute
       loop: "{{ sba_resolved.naming.instances }}"
       loop_control:
         loop_var: sba_instance

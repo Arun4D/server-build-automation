@@ -393,7 +393,7 @@ have different risk and different reviewers:
 
 | Path | Required reviewers |
 |---|---|
-| `roles/cloud/**`, `roles/image/**` | Cloud platform team |
+| `roles/provider/**`, `roles/image/**` | Cloud platform team |
 | `configuration/policies/**` | Security + platform leadership |
 | `configuration/images/**` | Image pipeline owners + security |
 | `playbooks/**`, `roles/platform/**` | Automation team |

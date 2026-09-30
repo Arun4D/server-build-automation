@@ -23,7 +23,7 @@ parameters and the same defaults**, and the playbook dispatches by static `inclu
                     │   playbooks/stages/provision  │
                     │   cloud_provider: azure       │
                     │   → include_tasks:            │
-                    │       roles/cloud/azure_vm/   │
+                    │       roles/provider/azure_vm/   │
                     │         tasks/main.yml        │
                     └───────────────┬──────────────┘
                                     │ same task names,
@@ -256,7 +256,7 @@ Each provider role declares its capabilities, and the resolver uses them to vali
 entry at resolution time rather than failing at apply time.
 
 ```yaml
-# roles/cloud/azure_vm/vars/main.yml — the role's capability declaration
+# roles/provider/azure_vm/vars/main.yml — the role's capability declaration
 sba_provider_capabilities:
   name: azure
   regions: "{{ lookup('sba_file', 'configuration/regions/azure.yml') }}"
@@ -347,10 +347,10 @@ first.
 
 | Layer | Mechanism | Catches |
 |---|---|---|
-| 1. Static | `ansible-lint` + a custom rule: every role in `roles/cloud/` implements the six task groups | A missing task group |
+| 1. Static | `ansible-lint` + a custom rule: every role in `roles/provider/` implements the six task groups | A missing task group |
 | 2. CI contract test | For each provider role, a Molecule scenario that exercises the full contract against a mocked API, asserting task names, argument names, and defaults | A signature drift |
 | 3. Parity test | The same contract test, run against all three roles with the same inputs and the same assertions | **The signature differences between providers** |
-| 4. Review | CODEOWNERS on `roles/cloud/**` | A semantic change to a contract |
+| 4. Review | CODEOWNERS on `roles/provider/**` | A semantic change to a contract |
 
 The parity test in layer 3 is the one that earns its keep. It is normal for a provider role to
 grow a task that makes sense for its cloud; what must not happen is that task becoming
@@ -358,8 +358,8 @@ grow a task that makes sense for its cloud; what must not happen is that task be
 task in one role quietly becomes part of the contract because the playbook started calling it.
 
 **CI enforcement** ([cicd-pipeline.md §2.1 ](cicd-pipeline.md#21-what-each-stage-is-for-and-what-it-cannot-catch)):
-a custom check fails the build if a file is added to `roles/cloud/` that does not implement the
-contract, and if a task in `roles/cloud/` calls a module outside the allowed cloud namespaces.
+a custom check fails the build if a file is added to `roles/provider/` that does not implement the
+contract, and if a task in `roles/provider/` calls a module outside the allowed cloud namespaces.
 
 ---
 
@@ -370,7 +370,7 @@ The checklist, with the honest note about versioning: adding a provider is a **m
 three clouds has to handle four.
 
 1. `configuration/clouds/<name>.yml` — region list, capability declaration, metadata limits
-2. `roles/cloud/<name>_vm/` — the six task groups, the capability vars file
+2. `roles/provider/<name>_vm/` — the six task groups, the capability vars file
 3. `roles/image/<name>_image/` — image reference resolution
 4. The static dispatch entry in the stage playbooks, plus a `case` branch in the provider
    registry. **No dynamic lookup**
