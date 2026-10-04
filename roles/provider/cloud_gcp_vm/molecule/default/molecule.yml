@@ -1,0 +1,44 @@
+---
+# Molecule Configuration for cloud_gcp_vm
+# Uses docker driver for fast logic tests.
+# For real GCP integration tests, see molecule/cloud/ (documented, not run in CI).
+
+driver:
+  name: docker
+
+platforms:
+  - name: cloud-gcp-vm-test
+    image: "geerlingguy/docker-ubuntu2204-ansible:latest"
+    pre_build_image: true
+    command: ""
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    privileged: true
+    cgroupns_mode: host
+
+provisioner:
+  name: ansible
+  inventory:
+    hosts:
+      all:
+        hosts:
+          cloud-gcp-vm-test:
+            ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+
+verifier:
+  name: ansible
+
+scenario:
+  name: default
+  test_sequence:
+    - lint
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

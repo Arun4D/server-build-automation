@@ -1,0 +1,30 @@
+---
+# Post-Build Domain Join Role - STUB
+# Phase 1: Domain join tooling not yet decided.
+# This stub fails with a clear TODO list of what needs to be decided/implemented.
+
+- name: "Domain Join — STUB: Domain join not yet implemented in this phase"
+  ansible.builtin.fail:
+    msg: |
+      Domain join (postbuild_domain_join) is not yet implemented in Phase 1.
+      
+      This is a stub role that defines the interface for future implementation.
+      
+      TODO - Decisions needed before implementation:
+      [ ] Domain controller FQDN / realm configuration source
+      [ ] OU placement strategy (per environment? per app_tier? static?)
+      [ ] Credentials source (AAP credential? Vault? CyberArk? ServiceNow?)
+      [ ] OS support matrix:
+          - RHEL 9: realm/sssd (preferred) or adcli
+          - Ubuntu 22.04: realm/sssd or adcli
+          - Windows 2022: PowerShell Add-Computer
+      [ ] Idempotent re-join logic (detect existing join, handle computer object cleanup)
+      [ ] Verification method: realm list / klist / AD computer object exists
+      [ ] Computer object naming convention (matches sba_name?)
+      [ ] GPO link strategy
+      [ ] Reboot handling after join
+      [ ] Offline domain join support (djoin.exe for Windows)
+      
+      Provider contract reference: docs/architecture/provider-abstraction.md
+      Open questions: docs/open-questions.md
+  tags: [postbuild_domain_join, stub]

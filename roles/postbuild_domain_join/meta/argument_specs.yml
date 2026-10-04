@@ -1,0 +1,50 @@
+---
+# Post-Build Domain Join Argument Specifications - STUB
+# Defines the interface for domain join role.
+
+argument_specs:
+  main:
+    short_description: Post-build domain join role (STUB - not yet implemented)
+    description:
+      - Joins provisioned VMs to Active Directory domain.
+      - PHASE 1: This is a stub. Domain join tooling not yet decided.
+    options:
+      sba_instance_id:
+        type: str
+        required: true
+        description:
+          - Unique run identifier from provision step.
+          - Used to correlate domain join with provisioned instance.
+      domain_controller:
+        type: str
+        required: true
+        description:
+          - Active Directory domain controller FQDN.
+      domain_realm:
+        type: str
+        required: true
+        description:
+          - Kerberos realm (e.g., EXAMPLE.COM).
+      domain_ou:
+        type: str
+        required: true
+        description:
+          - Organizational Unit path for computer object.
+      domain_join_user:
+        type: str
+        required: true
+        description:
+          - Account with domain join permissions.
+      domain_join_password:
+        type: str
+        required: true
+        description:
+          - Credential for domain join account.
+        no_log: true
+      domain_join_operation:
+        type: str
+        required: false
+        default: 'join'
+        choices: ['join', 'verify', 'leave']
+        description:
+          - Operation to perform.

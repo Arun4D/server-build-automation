@@ -1,0 +1,38 @@
+---
+# GCP VM List Owned Resources
+# Lists all resources carrying the sba_instance_id label.
+# Used by destroy operation to ensure complete cleanup.
+
+- name: "GCP List Owned — List instances with sba_instance_id label"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_owned_instances
+  changed_when: false
+  tags: [cloud_gcp_vm, list_owned]
+
+- name: "GCP List Owned — List disks with sba_instance_id label"
+  google.cloud.gcp_compute_disk_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_owned_disks
+  changed_when: false
+  tags: [cloud_gcp_vm, list_owned]
+
+- name: "GCP List Owned — Set owned resources fact"
+  ansible.builtin.set_fact:
+    gcp_owned_resources:
+      instances: "{{ gcp_owned_instances.resources }}"
+      disks: "{{ gcp_owned_disks.resources }}"
+  tags: [cloud_gcp_vm, list_owned]
+
+- name: "GCP List Owned — Debug owned resources"
+  ansible.builtin.debug:
+    msg: "Owned resources: {{ gcp_owned_resources.instances | length }} instance(s), {{ gcp_owned_resources.disks | length }} disk(s)"
+  tags: [cloud_gcp_vm, list_owned]

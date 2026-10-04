@@ -1,0 +1,18 @@
+---
+# Post-Build Domain Join Role Defaults - STUB
+# Defaults for domain join configuration (when implemented).
+
+# Domain join operation
+domain_join_operation: "join"
+
+# Retry settings
+domain_join_retry_attempts: 3
+domain_join_retry_delay: 10
+
+# OS-specific defaults (placeholders)
+domain_join_linux_tool: "realm"  # realm | adcli
+domain_join_windows_tool: "powershell"  # powershell | djoin
+
+# Verification
+domain_join_verify: true
+domain_join_verify_method: "realm_list"  # realm_list | klist | ad_object

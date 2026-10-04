@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: cloud_azure_vm
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Microsoft Azure VM provisioning role (STUB - Phase 1 not implemented).
+    Maintains the unified provider contract interface for future implementation.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - azure
+    - compute
+    - cloud
+    - vm
+    - provisioning
+    - stub
+
+dependencies: []
+
+collections:
+  - azure.azcollection
+  - ansible.utils
+  - community.general

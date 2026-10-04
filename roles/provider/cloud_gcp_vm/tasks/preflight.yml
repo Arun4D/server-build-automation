@@ -1,0 +1,136 @@
+---
+# GCP VM Preflight Checks
+# Validates project, quota, APIs enabled, and credentials before any mutation.
+
+- name: "GCP Preflight — Check required APIs are enabled"
+  google.cloud.gcp_compute_project_info:
+    project: "{{ gcp_project }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_project_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, apis]
+
+- name: "GCP Preflight — Assert Compute API enabled"
+  ansible.builtin.assert:
+    that:
+      - "'compute.googleapis.com' in (gcp_project_info.enabled_apis | default([]))"
+    fail_msg: "Compute Engine API is not enabled in project {{ gcp_project }}"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, apis]
+
+- name: "GCP Preflight — Check quota for instances in region"
+  google.cloud.gcp_compute_region_info:
+    project: "{{ gcp_project }}"
+    region: "{{ gcp_region }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_region_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, quota]
+
+- name: "GCP Preflight — Assert sufficient instance quota"
+  ansible.builtin.assert:
+    that:
+      - gcp_region_info.quotas is defined
+      - gcp_region_info.quotas | selectattr('metric', 'equalto', 'IN_USE_ADDRESSES') | map(attribute='limit') | first | default(0) > 0
+    fail_msg: "Insufficient quota for external IPs in region {{ gcp_region }}"
+    quiet: true
+  when: gcp_allow_external_ip | default(false)
+  tags: [cloud_gcp_vm, preflight, quota]
+
+- name: "GCP Preflight — Validate subnet exists and is in correct region"
+  google.cloud.gcp_compute_subnetwork_info:
+    project: "{{ gcp_project }}"
+    region: "{{ gcp_region }}"
+    name: "{{ gcp_subnet | basename }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_subnet_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, networking]
+
+- name: "GCP Preflight — Assert subnet found"
+  ansible.builtin.assert:
+    that:
+      - gcp_subnet_info.resources | length == 1
+    fail_msg: "Subnet {{ gcp_subnet }} not found in project {{ gcp_project }} region {{ gcp_region }}"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, networking]
+
+- name: "GCP Preflight — Validate service account exists"
+  google.cloud.gcp_iam_service_account_info:
+    project: "{{ gcp_project }}"
+    name: "{{ gcp_service_account }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_sa_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, identity]
+
+- name: "GCP Preflight — Assert service account found"
+  ansible.builtin.assert:
+    that:
+      - gcp_sa_info.resources | length == 1
+    fail_msg: "Service account {{ gcp_service_account }} not found in project {{ gcp_project }}"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, identity]
+
+- name: "GCP Preflight — Validate image family exists and resolve to pinned image"
+  google.cloud.gcp_compute_image_info:
+    project: "{{ gcp_image_family | regex_replace('^projects/([^/]+)/.*', '\\1') }}"
+    family: "{{ gcp_image_family | regex_replace('.*/family/([^/]+)$', '\\1') }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_image_family_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, image]
+
+- name: "GCP Preflight — Assert image family found"
+  ansible.builtin.assert:
+    that:
+      - gcp_image_family_info.resources | length == 1
+    fail_msg: "Image family {{ gcp_image_family }} not found or not accessible"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, image]
+
+- name: "GCP Preflight — Set pinned image self_link fact"
+  ansible.builtin.set_fact:
+    gcp_pinned_image_self_link: "{{ gcp_image_family_info.resources[0].selfLink }}"
+  tags: [cloud_gcp_vm, preflight, image]
+
+- name: "GCP Preflight — Validate machine type exists in zone"
+  google.cloud.gcp_compute_machine_type_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    name: "{{ gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1') }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_machine_type_info
+  changed_when: false
+  tags: [cloud_gcp_vm, preflight, compute]
+
+- name: "GCP Preflight — Assert machine type found"
+  ansible.builtin.assert:
+    that:
+      - gcp_machine_type_info.resources | length == 1
+    fail_msg: "Machine type {{ gcp_machine_type }} not found in zone {{ gcp_zone }}"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, compute]
+
+- name: "GCP Preflight — Validate sba_instance_id label format"
+  ansible.builtin.assert:
+    that:
+      - sba_instance_id | regex_search('^[a-f0-9-]{36}$') or sba_instance_id | regex_search('^[A-Z0-9]{10,}$')
+    fail_msg: "sba_instance_id must be a UUID or ServiceNow sys_id format"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, validation]
+
+- name: "GCP Preflight — Validate sba_name format (≤15 chars, lowercase, alphanumeric + hyphen)"
+  ansible.builtin.assert:
+    that:
+      - sba_name | length <= 15
+      - sba_name | regex_search('^[a-z][a-z0-9-]*[a-z0-9]$')
+    fail_msg: "sba_name must be ≤15 chars, lowercase, alphanumeric + hyphen, start with letter"
+    quiet: true
+  tags: [cloud_gcp_vm, preflight, validation]

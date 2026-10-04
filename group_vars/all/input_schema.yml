@@ -1,0 +1,76 @@
+# Input Schema for GCP VM Provisioning
+# Validates the 8 user-facing variables at playbook entry.
+# Used by: playbooks/provision.yml, post_build_domain_join.yml, post_build_agent_install.yml
+# Also used by: GitHub Actions (input validation), AAP (survey spec), ServiceNow (payload validation)
+
+# JSONSchema Draft 2020-12
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://server-build-automation.example.com/schemas/gcp-input-vars.schema.json"
+title: "GCP VM Provisioning Input Variables"
+description: "Contract for the 8 variables that drive GCP VM provisioning. All other infrastructure coordinates are derived from lookup tables."
+type: object
+additionalProperties: false
+required:
+  - cloud
+  - environment
+  - os_family
+  - app_tier
+  - vm_count
+  - requestor
+  - change_ticket
+properties:
+  cloud:
+    type: string
+    enum: ["gcp", "azure", "aws"]
+    description: "Target cloud provider. Phase 1 only implements 'gcp'; others fail fast via provider_dispatch."
+    examples: ["gcp"]
+
+  environment:
+    type: string
+    enum: ["dev", "staging", "prod"]
+    description: "Deployment environment. Maps to GCP project, network, subnet, and service account."
+    examples: ["dev"]
+
+  os_family:
+    type: string
+    enum: ["rhel9", "ubuntu2204", "windows2022"]
+    description: "OS family/version. Maps to GCP image family via gcp_image_family_map."
+    examples: ["rhel9"]
+
+  app_tier:
+    type: string
+    enum: ["web", "app", "db"]
+    description: "Application tier. Maps to subnet, machine type, security policy, and cost center."
+    examples: ["web"]
+
+  vm_count:
+    type: integer
+    minimum: 1
+    maximum: 20
+    description: "Number of VMs to provision. Phase 1 uses direct gcp_compute_instance loop; >20 may need MIG in future."
+    examples: [3]
+
+  requestor:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]{1,64}$"
+    description: "ServiceNow user who requested the build. Used for 'owner' label and audit trail."
+    examples: ["john.doe"]
+
+  change_ticket:
+    type: string
+    pattern: "^CHG[0-9]{7,}$"
+    description: "ServiceNow change ticket number. Required for 'change_ticket' label and audit trail."
+    examples: ["CHG0012345"]
+
+  expiry_date:
+    type: string
+    format: date
+    description: "Optional lifecycle expiry date (YYYY-MM-DD). Used for 'expiry' label. If omitted, no expiry label applied."
+    examples: ["2027-12-31"]
+
+# Validation rules that cannot be expressed in JSONSchema alone:
+# - cloud must be 'gcp' in Phase 1 (enforced by provider_dispatch)
+# - os_family must be supported by the target environment's image family map
+# - app_tier must have a subnet entry in gcp_subnet_map for the environment
+# - vm_count > 10 should warn (future MIG threshold)
+# These are enforced in playbooks/provision.yml preflight tasks.

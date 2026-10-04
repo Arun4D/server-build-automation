@@ -1,0 +1,57 @@
+# GCP Region Map
+# Maps environment + app_tier → GCP region.
+# Used by: roles/cloud_gcp_vm/tasks/preflight.yml, create_instance.yml, attach_networking.yml
+# Regions are chosen for latency, compliance, and quota availability per environment/tier.
+# All values are placeholders — replace with actual regions per environment.
+
+gcp_region_map:
+  dev:
+    web: "us-central1"
+    app: "us-central1"
+    db: "us-central1"
+  staging:
+    web: "us-central1"
+    app: "us-central1"
+    db: "us-central1"
+  prod:
+    web: "us-central1"
+    app: "us-central1"
+    db: "us-central1"
+
+# Alternative: region per tier for multi-region deployments (future).
+# gcp_region_map:
+#   dev:
+#     web: "us-central1"
+#     app: "us-central1"
+#     db: "us-west1"
+#   staging:
+#     web: "us-central1"
+#     app: "us-central1"
+#     db: "us-west1"
+#   prod:
+#     web: "us-central1"
+#     app: "us-central1"
+#     db: "us-west1"
+
+# Region metadata for validation and quota checks.
+gcp_region_metadata:
+  us-central1:
+    description: "Iowa, USA - Primary region for all environments"
+    zones: ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+  us-west1:
+    description: "Oregon, USA - Secondary region for DR"
+    zones: ["us-west1-a", "us-west1-b", "us-west1-c"]
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+  europe-west1:
+    description: "Belgium, EU - For EU data residency"
+    zones: ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+  asia-east1:
+    description: "Taiwan, Asia - For APAC workloads"
+    zones: ["asia-east1-a", "asia-east1-b", "asia-east1-c"]
+    supports_shielded_vm: true
+    supports_confidential_vm: true

@@ -1,0 +1,98 @@
+---
+# Molecule Verify Playbook for cloud_gcp_vm
+# Validates that the role produces expected outputs and handles errors correctly.
+
+- name: Verify cloud_gcp_vm
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: "Verify — sba_facts.server is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_facts is defined
+          - sba_facts.server is defined
+          - sba_facts.server.instance_id is defined
+          - sba_facts.server.instance_name == "sba-dev-web-r9-001"
+          - sba_facts.server.state == "RUNNING"
+          - sba_facts.server.private_ip is defined
+        fail_msg: "sba_facts.server missing or incomplete"
+        quiet: true
+
+    - name: "Verify — sba_facts.network is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_facts.network is defined
+          - sba_facts.network.vpc_id is defined
+          - sba_facts.network.subnet_id is defined
+          - sba_facts.network.nic_id is defined
+          - sba_facts.network.private_ip is defined
+          - sba_facts.network.availability_zone == "us-central1-a"
+        fail_msg: "sba_facts.network missing or incomplete"
+        quiet: true
+
+    - name: "Verify — sba_facts.disk is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_facts.disk is defined
+          - sba_facts.disk.os_disk_id is defined
+          - sba_facts.disk.os_disk_size_gb == 30
+          - sba_facts.disk.os_disk_type is defined
+        fail_msg: "sba_facts.disk missing or incomplete"
+        quiet: true
+
+    - name: "Verify — sba_facts.image is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_facts.image is defined
+          - sba_facts.image.applied_image_id is defined
+          - sba_facts.image.applied_version is defined
+        fail_msg: "sba_facts.image missing or incomplete"
+        quiet: true
+
+    - name: "Verify — sba_facts.tags is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_facts.tags is defined
+          - sba_facts.tags.applied is defined
+          - sba_facts.tags.applied.owner == "test.user"
+          - sba_facts.tags.applied.cost_center == "CC-DEV-WEB"
+          - sba_facts.tags.applied.environment == "dev"
+          - sba_facts.tags.applied.change_ticket == "CHG0000001"
+          - sba_facts.tags.applied.sba_instance_id == "12345678-1234-1234-1234-123456789012"
+          - sba_facts.tags.verified == true
+        fail_msg: "sba_facts.tags missing or incomplete"
+        quiet: true
+
+    - name: "Verify — sba_result is defined"
+      ansible.builtin.assert:
+        that:
+          - sba_result is defined
+          - sba_result.changed is defined
+          - sba_result.status in ["created", "adopted"]
+          - sba_result.duration_s is defined
+        fail_msg: "sba_result missing or incomplete"
+        quiet: true
+
+    - name: "Verify — gcp_adopted fact is boolean"
+      ansible.builtin.assert:
+        that:
+          - gcp_adopted is defined
+          - gcp_adopted in [true, false]
+        fail_msg: "gcp_adopted not set correctly"
+        quiet: true
+
+    - name: "Verify — gcp_instance_id is set"
+      ansible.builtin.assert:
+        that:
+          - gcp_instance_id is defined
+          - gcp_instance_id | length > 0
+        fail_msg: "gcp_instance_id not set"
+        quiet: true
+
+    - name: "Verify — gcp_pinned_image_self_link is set"
+      ansible.builtin.assert:
+        that:
+          - gcp_pinned_image_self_link is defined
+          - gcp_pinned_image_self_link | length > 0
+        fail_msg: "gcp_pinned_image_self_link not set"
+        quiet: true

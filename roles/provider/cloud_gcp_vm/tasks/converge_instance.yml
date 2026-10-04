@@ -1,0 +1,111 @@
+---
+# GCP VM Converge Mutable Attributes
+# Updates mutable attributes to match desired state.
+# Never creates, never deletes, never touches immutable attributes.
+
+- name: "GCP Converge — Skip if instance was just created (no converge needed)"
+  ansible.builtin.meta: end_host
+  when: gcp_create_result.changed
+  tags: [cloud_gcp_vm, converge]
+
+- name: "GCP Converge — Check if machine type needs update"
+  ansible.builtin.set_fact:
+    gcp_machine_type_needs_update: "{{ gcp_create_result.instance.machineType != 'zones/' ~ gcp_zone ~ '/machineTypes/' ~ (gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1')) }}"
+  tags: [cloud_gcp_vm, converge]
+
+- name: "GCP Converge — Update machine type (requires stop/start)"
+  when: gcp_machine_type_needs_update
+  block:
+    - name: "GCP Converge — Stop instance"
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        status: TERMINATED
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: gcp_stop_result
+      tags: [cloud_gcp_vm, converge, resize]
+
+    - name: "GCP Converge — Update machine type"
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        machine_type: "{{ gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1') }}"
+        state: present
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: gcp_resize_result
+      tags: [cloud_gcp_vm, converge, resize]
+
+    - name: "GCP Converge — Start instance"
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        status: RUNNING
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: gcp_start_result
+      tags: [cloud_gcp_vm, converge, resize]
+
+- name: "GCP Converge — Update labels (mutable, no reboot needed)"
+  ansible.builtin.set_fact:
+    gcp_labels_to_update: |
+      {{
+        gcp_instance_labels |
+        combine(
+          gcp_create_result.instance.labels | default({}),
+          recursive=true
+        )
+      }}
+  tags: [cloud_gcp_vm, converge, labels]
+
+- name: "GCP Converge — Apply label updates if changed"
+  when: gcp_labels_to_update != (gcp_create_result.instance.labels | default({}))
+  block:
+    - name: "GCP Converge — Update instance labels"
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        labels: "{{ gcp_labels_to_update }}"
+        state: present
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: gcp_label_update_result
+      tags: [cloud_gcp_vm, converge, labels]
+
+- name: "GCP Converge — Update disk sizes (expand only, never shrink)"
+  when: gcp_data_disks is defined and gcp_data_disks | length > 0
+  block:
+    - name: "GCP Converge — Check each data disk for size increase"
+      ansible.builtin.set_fact:
+        gcp_disks_to_resize: |
+          {{
+            gcp_data_disks |
+            zip(gcp_create_result.instance.disks[1:] | default([])) |
+            selectattr('0.size_gb', '>', '1.diskSizeGb') |
+            map(attribute='0') |
+            list
+          }}
+      tags: [cloud_gcp_vm, converge, disks]
+
+    - name: "GCP Converge — Resize data disks"
+      google.cloud.gcp_compute_disk:
+        name: "{{ item.name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        size_gb: "{{ item.size_gb }}"
+        state: present
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      loop: "{{ gcp_disks_to_resize }}"
+      register: gcp_disk_resize_results
+      tags: [cloud_gcp_vm, converge, disks]
+
+- name: "GCP Converge — Debug converge summary"
+  ansible.builtin.debug:
+    msg: "Converge complete: machine_type={{ 'updated' if gcp_machine_type_needs_update else 'unchanged' }}, labels={{ 'updated' if gcp_labels_to_update != (gcp_create_result.instance.labels | default({})) else 'unchanged' }}, disks={{ gcp_disks_to_resize | default([]) | length }} resized"
+  tags: [cloud_gcp_vm, converge]

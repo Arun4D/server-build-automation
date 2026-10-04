@@ -1,0 +1,104 @@
+# GCP Zone Map
+# Maps region → preferred zone for VM placement.
+# Used by: roles/cloud_gcp_vm/tasks/create_instance.yml
+# Zone selection strategy: prefer zone with most quota, then alphabetical.
+# For multi-VM deployments (vm_count > 1), instances are distributed across zones.
+
+gcp_zone_map:
+  us-central1:
+    primary: "us-central1-a"
+    alternatives: ["us-central1-b", "us-central1-c", "us-central1-f"]
+    distribution_strategy: "round_robin"
+  us-west1:
+    primary: "us-west1-a"
+    alternatives: ["us-west1-b", "us-west1-c"]
+    distribution_strategy: "round_robin"
+  europe-west1:
+    primary: "europe-west1-b"
+    alternatives: ["europe-west1-c", "europe-west1-d"]
+    distribution_strategy: "round_robin"
+  asia-east1:
+    primary: "asia-east1-a"
+    alternatives: ["asia-east1-b", "asia-east1-c"]
+    distribution_strategy: "round_robin"
+
+# Zone metadata for validation and quota checks.
+gcp_zone_metadata:
+  us-central1-a:
+    region: "us-central1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  us-central1-b:
+    region: "us-central1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  us-central1-c:
+    region: "us-central1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  us-central1-f:
+    region: "us-central1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: true
+  us-west1-a:
+    region: "us-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  us-west1-b:
+    region: "us-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  us-west1-c:
+    region: "us-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  europe-west1-b:
+    region: "europe-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  europe-west1-c:
+    region: "europe-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  europe-west1-d:
+    region: "europe-west1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  asia-east1-a:
+    region: "asia-east1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  asia-east1-b:
+    region: "asia-east1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false
+  asia-east1-c:
+    region: "asia-east1"
+    status: "available"
+    supports_shielded_vm: true
+    supports_confidential_vm: true
+    supports_tpu: false

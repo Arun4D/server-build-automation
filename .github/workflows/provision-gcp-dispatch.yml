@@ -1,0 +1,113 @@
+---
+# GitHub Actions Dispatch Wrapper: ServiceNow → Provision GCP
+# Receives repository_dispatch from ServiceNow, validates payload, calls reusable workflow.
+# This separation allows ServiceNow to send a simple payload while the reusable workflow
+# handles the complex OIDC authentication and provisioning logic.
+
+name: "Provision GCP Dispatch (ServiceNow)"
+
+on:
+  repository_dispatch:
+    types: [provision_gcp]
+
+permissions:
+  contents: read
+
+jobs:
+  validate_and_dispatch:
+    name: "Validate ServiceNow Payload & Dispatch"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Extract and validate ServiceNow payload"
+        id: payload
+        run: |
+          PAYLOAD='${{ toJson(github.event.client_payload) }}'
+          echo "Received payload: $PAYLOAD"
+          
+          # Extract required fields
+          CLOUD=$(echo "$PAYLOAD" | jq -r '.cloud // "gcp"')
+          ENVIRONMENT=$(echo "$PAYLOAD" | jq -r '.environment // empty')
+          OS_FAMILY=$(echo "$PAYLOAD" | jq -r '.os_family // empty')
+          APP_TIER=$(echo "$PAYLOAD" | jq -r '.app_tier // empty')
+          VM_COUNT=$(echo "$PAYLOAD" | jq -r '.vm_count // "1"')
+          REQUESTOR=$(echo "$PAYLOAD" | jq -r '.requestor // empty')
+          CHANGE_TICKET=$(echo "$PAYLOAD" | jq -r '.change_ticket // empty')
+          EXPIRY_DATE=$(echo "$PAYLOAD" | jq -r '.expiry_date // ""')
+          CALLBACK_URL=$(echo "$PAYLOAD" | jq -r '.callback_url // ""')
+          RUN_DOMAIN_JOIN=$(echo "$PAYLOAD" | jq -r '.run_domain_join // "false"')
+          RUN_AGENT_INSTALL=$(echo "$PAYLOAD" | jq -r '.run_agent_install // "false"')
+          AGENT_TYPE=$(echo "$PAYLOAD" | jq -r '.agent_type // ""')
+          AGENT_INSTALL_METHOD=$(echo "$PAYLOAD" | jq -r '.agent_install_method // ""')
+          AGENT_CONFIG=$(echo "$PAYLOAD" | jq -c '.agent_config // {}')
+          
+          # Validate required fields
+          if [[ -z "$ENVIRONMENT" || ! "$ENVIRONMENT" =~ ^(dev|staging|prod)$ ]]; then
+            echo "Invalid or missing environment: $ENVIRONMENT"
+            exit 1
+          fi
+          if [[ -z "$OS_FAMILY" || ! "$OS_FAMILY" =~ ^(rhel9|ubuntu2204|windows2022)$ ]]; then
+            echo "Invalid or missing os_family: $OS_FAMILY"
+            exit 1
+          fi
+          if [[ -z "$APP_TIER" || ! "$APP_TIER" =~ ^(web|app|db)$ ]]; then
+            echo "Invalid or missing app_tier: $APP_TIER"
+            exit 1
+          fi
+          if [[ ! "$VM_COUNT" =~ ^[0-9]+$ || "$VM_COUNT" -lt 1 || "$VM_COUNT" -gt 20 ]]; then
+            echo "Invalid vm_count: $VM_COUNT (must be 1-20)"
+            exit 1
+          fi
+          if [[ -z "$REQUESTOR" || ! "$REQUESTOR" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]; then
+            echo "Invalid or missing requestor: $REQUESTOR"
+            exit 1
+          fi
+          if [[ -z "$CHANGE_TICKET" || ! "$CHANGE_TICKET" =~ ^CHG[0-9]{7,}$ ]]; then
+            echo "Invalid or missing change_ticket: $CHANGE_TICKET"
+            exit 1
+          fi
+          if [[ -n "$EXPIRY_DATE" && ! "$EXPIRY_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid expiry_date format: $EXPIRY_DATE (must be YYYY-MM-DD)"
+            exit 1
+          fi
+          
+          # Output validated values for next steps
+          echo "cloud=$CLOUD" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "os_family=$OS_FAMILY" >> $GITHUB_OUTPUT
+          echo "app_tier=$APP_TIER" >> $GITHUB_OUTPUT
+          echo "vm_count=$VM_COUNT" >> $GITHUB_OUTPUT
+          echo "requestor=$REQUESTOR" >> $GITHUB_OUTPUT
+          echo "change_ticket=$CHANGE_TICKET" >> $GITHUB_OUTPUT
+          echo "expiry_date=$EXPIRY_DATE" >> $GITHUB_OUTPUT
+          echo "callback_url=$CALLBACK_URL" >> $GITHUB_OUTPUT
+          echo "run_domain_join=$RUN_DOMAIN_JOIN" >> $GITHUB_OUTPUT
+          echo "run_agent_install=$RUN_AGENT_INSTALL" >> $GITHUB_OUTPUT
+          echo "agent_type=$AGENT_TYPE" >> $GITHUB_OUTPUT
+          echo "agent_install_method=$AGENT_INSTALL_METHOD" >> $GITHUB_OUTPUT
+          echo "agent_config=$AGENT_CONFIG" >> $GITHUB_OUTPUT
+
+      - name: "Dispatch to provision-gcp reusable workflow"
+        uses: actions/workflow_dispatch@v4
+        with:
+          workflow: provision-gcp.yml
+          inputs: |
+            cloud: ${{ steps.payload.outputs.cloud }}
+            environment: ${{ steps.payload.outputs.environment }}
+            os_family: ${{ steps.payload.outputs.os_family }}
+            app_tier: ${{ steps.payload.outputs.app_tier }}
+            vm_count: ${{ steps.payload.outputs.vm_count }}
+            requestor: ${{ steps.payload.outputs.requestor }}
+            change_ticket: ${{ steps.payload.outputs.change_ticket }}
+            expiry_date: ${{ steps.payload.outputs.expiry_date }}
+            callback_url: ${{ steps.payload.outputs.callback_url }}
+            run_domain_join: ${{ steps.payload.outputs.run_domain_join }}
+            run_agent_install: ${{ steps.payload.outputs.run_agent_install }}
+            agent_type: ${{ steps.payload.outputs.agent_type }}
+            agent_install_method: ${{ steps.payload.outputs.agent_install_method }}
+            agent_config: ${{ steps.payload.outputs.agent_config }}
+          ref: ${{ github.ref }}

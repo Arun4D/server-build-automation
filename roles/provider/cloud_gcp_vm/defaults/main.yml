@@ -1,0 +1,39 @@
+---
+# Cloud GCP VM Role Defaults
+# Shared defaults for GCP VM provisioning.
+# These can be overridden by group_vars or playbook vars.
+
+# Operation to perform
+sba_operation: "provision"
+
+# Retry and timeout settings
+sba_retry_attempts: 3
+sba_retry_delay: 5
+sba_delete_timeout: 1800
+sba_wait_ready_timeout: 3600
+
+# GCP-specific defaults
+gcp_allow_external_ip: false
+gcp_external_ip_justification: ""
+
+gcp_root_disk_size_gb: 30
+gcp_root_disk_type: "pd-balanced"
+
+gcp_shielded_secure_boot: true
+gcp_shielded_vtpm: true
+gcp_shielded_integrity_monitoring: true
+
+gcp_deletion_protection: false
+
+gcp_scopes:
+  - "https://www.googleapis.com/auth/devstorage.read_only"
+  - "https://www.googleapis.com/auth/logging.write"
+  - "https://www.googleapis.com/auth/monitoring.write"
+
+gcp_network_tags: []
+
+# Data disks (optional) - list of dicts with size_gb, disk_type, index
+gcp_data_disks: []
+
+# OS family for wait_for_ready (ssh vs winrm)
+gcp_os_family: "{{ os_family }}"

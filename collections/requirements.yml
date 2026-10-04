@@ -1,5 +1,9 @@
 ---
-# Collections required by the platform.
+# Collections required by the platform — installed into ./collections/
+#
+# This file is used by `ansible-galaxy collection install -r collections/requirements.yml -p collections/`
+# to populate the project-local collections directory. It mirrors the root requirements.yml
+# but ensures the local collections/ directory has exactly what the platform needs.
 #
 # Every version is pinned exactly. An unpinned collection is how a production
 # build changes behaviour because a dependency shipped a release.
@@ -7,20 +11,8 @@
 # CI gate: every ansible.builtin / <namespace>.<collection> referenced by a role
 # must be declared here. An undeclared dependency resolves at build time from
 # whatever happens to be installed, which is non-deterministic by construction.
-#
-# See docs/architecture/repository-structure.md section 13.
 
 collections:
-  # --- core ---------------------------------------------------------------
-  # ansible.builtin is deliberately ABSENT. It is not an independently
-  # installable collection: it is versioned with ansible-core and ships inside
-  # it, and Galaxy publishes zero releases under ansible/builtin. Pinning it
-  # here makes `ansible-galaxy collection install -r requirements.yml` fail
-  # outright, with an error about the dependency map rather than about the
-  # thing you got wrong. The ansible-core version is pinned where it belongs,
-  # in the execution environment definition, because that is what actually
-  # determines the bundled collection's version.
-
   # --- platform, DNS, crypto ----------------------------------------------
   - name: ansible.posix
     version: "1.5.4"

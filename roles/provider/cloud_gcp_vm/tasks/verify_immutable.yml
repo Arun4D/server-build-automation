@@ -1,0 +1,69 @@
+---
+# GCP VM Verify Immutable Attributes
+# Asserts that project, region, network, subnet, and image cannot differ
+# from the existing instance. Fails with IMMUTABLE_MISMATCH if they do.
+
+- name: "GCP Verify Immutable — Skip if no existing instance"
+  ansible.builtin.meta: end_host
+  when: not gcp_instance_found
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Assert project matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_existing_instance.project == gcp_project
+    fail_msg: |
+      IMMUTABLE_MISMATCH: Instance project ({{ gcp_existing_instance.project }})
+      does not match requested project ({{ gcp_project }}).
+      Immutable attributes cannot be changed.
+    quiet: true
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Assert region matches (zone implies region)"
+  ansible.builtin.assert:
+    that:
+      - gcp_existing_instance.zone | regex_replace('.*/([^/]+)-[a-z]$', '\\1') == gcp_region
+    fail_msg: |
+      IMMUTABLE_MISMATCH: Instance region ({{ gcp_existing_instance.zone }})
+      does not match requested region ({{ gcp_region }}).
+      Immutable attributes cannot be changed.
+    quiet: true
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Assert network matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_existing_instance.networkInterfaces[0].network == gcp_network
+    fail_msg: |
+      IMMUTABLE_MISMATCH: Instance network ({{ gcp_existing_instance.networkInterfaces[0].network }})
+      does not match requested network ({{ gcp_network }}).
+      Immutable attributes cannot be changed.
+    quiet: true
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Assert subnet matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_existing_instance.networkInterfaces[0].subnetwork == gcp_subnet
+    fail_msg: |
+      IMMUTABLE_MISMATCH: Instance subnet ({{ gcp_existing_instance.networkInterfaces[0].subnetwork }})
+      does not match requested subnet ({{ gcp_subnet }}).
+      Immutable attributes cannot be changed.
+    quiet: true
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Assert image matches (pinned self_link)"
+  ansible.builtin.assert:
+    that:
+      - gcp_existing_instance.disks[0].source == gcp_pinned_image_self_link
+    fail_msg: |
+      IMMUTABLE_MISMATCH: Instance image ({{ gcp_existing_instance.disks[0].source }})
+      does not match requested pinned image ({{ gcp_pinned_image_self_link }}).
+      Image is immutable; a rebuild is required.
+    quiet: true
+  tags: [cloud_gcp_vm, verify]
+
+- name: "GCP Verify Immutable — Set adopted fact"
+  ansible.builtin.set_fact:
+    gcp_adopted: true
+  tags: [cloud_gcp_vm, verify]

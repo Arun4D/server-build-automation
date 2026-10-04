@@ -1,0 +1,61 @@
+---
+# GCP VM Delete Instance
+# Deletes instance and associated disks in reverse creation order.
+# Only deletes if adopted: false (never deletes adopted instances).
+
+- name: "GCP Delete — Assert not adopted (safety guard)"
+  ansible.builtin.assert:
+    that:
+      - not gcp_adopted
+    fail_msg: |
+      REFUSE_TO_DELETE: Instance {{ sba_name }} was adopted (adopted=true).
+      Destroy operation only deletes instances created by this run (adopted=false).
+      Manual cleanup required for adopted instances.
+    quiet: true
+  tags: [cloud_gcp_vm, delete]
+
+- name: "GCP Delete — Detach and delete data disks first"
+  when: gcp_owned_resources.disks | length > 0
+  block:
+    - name: "GCP Delete — Delete each data disk"
+      google.cloud.gcp_compute_disk:
+        name: "{{ item.name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        state: absent
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      loop: "{{ gcp_owned_resources.disks }}"
+      register: gcp_disk_delete_results
+      tags: [cloud_gcp_vm, delete, disks]
+
+- name: "GCP Delete — Delete instance"
+  google.cloud.gcp_compute_instance:
+    name: "{{ sba_name }}"
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    state: absent
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_delete_result
+  tags: [cloud_gcp_vm, delete]
+
+- name: "GCP Delete — Wait for instance deletion to complete"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    name: "{{ sba_name }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_delete_verify
+  until: gcp_delete_verify.resources | length == 0
+  retries: "{{ sba_delete_timeout | default(1800) / sba_retry_delay | default(5) }}"
+  delay: "{{ sba_retry_delay | default(5) }}"
+  changed_when: false
+  failed_when: false
+  tags: [cloud_gcp_vm, delete]
+
+- name: "GCP Delete — Debug delete result"
+  ansible.builtin.debug:
+    msg: "Instance {{ sba_name }} and associated resources deleted"
+  tags: [cloud_gcp_vm, delete]

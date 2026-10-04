@@ -1,0 +1,33 @@
+# GCP Project Map
+# Maps environment → GCP project ID.
+# Used by: roles/cloud_gcp_vm/tasks/preflight.yml, resolve_image.yml, create_instance.yml
+# All project IDs are placeholders — replace with actual project IDs per environment.
+# Never commit real project IDs to this repository.
+
+gcp_project_map:
+  dev: "<gcp-project-id-dev>"
+  staging: "<gcp-project-id-staging>"
+  prod: "<gcp-project-id-prod>"
+
+# Service account email pattern per environment.
+# The service account must have: roles/compute.instanceAdmin, roles/iam.serviceAccountUser
+# on the project, and roles/compute.networkUser on the host project (if shared VPC).
+gcp_service_account_map:
+  dev: "sba-vm-sa@<gcp-project-id-dev>.iam.gserviceaccount.com"
+  staging: "sba-vm-sa@<gcp-project-id-staging>.iam.gserviceaccount.com"
+  prod: "sba-vm-sa@<gcp-project-id-prod>.iam.gserviceaccount.com"
+
+# Network host project (for shared VPC).
+# If using standalone VPC per environment, this equals the environment project.
+# If using shared VPC, this is the host project ID.
+gcp_network_host_project_map:
+  dev: "<gcp-project-id-dev>"
+  staging: "<gcp-project-id-staging>"
+  prod: "<gcp-project-id-prod>"
+
+# VPC network self-link pattern per environment.
+# Format: projects/<host-project>/global/networks/<network-name>
+gcp_network_map:
+  dev: "projects/<gcp-project-id-dev>/global/networks/sba-vpc-dev"
+  staging: "projects/<gcp-project-id-staging>/global/networks/sba-vpc-staging"
+  prod: "projects/<gcp-project-id-prod>/global/networks/sba-vpc-prod"

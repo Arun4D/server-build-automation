@@ -1,0 +1,120 @@
+# GCP Tag Policy
+# Defines required labels, annotations, naming conventions, and validation rules.
+# Used by: roles/common/tagging_gcp/tasks/main.yml, roles/cloud_gcp_vm/tasks/create_instance.yml
+# Labels are applied at create time (immutable without stop/start).
+# Annotations are applied post-create (mutable).
+
+# Required labels (enforced at instance creation).
+# These labels are the primary mechanism for:
+# - Cost allocation (owner, cost_center, environment)
+# - Lifecycle management (expiry, change_ticket)
+# - Idempotency lookup (sba_instance_id)
+gcp_required_labels:
+  - key: "owner"
+    description: "Requestor who initiated the build (from requestor variable)"
+    value_source: "requestor"
+    required: true
+  - key: "cost_center"
+    description: "Cost center derived from app_tier + environment"
+    value_source: "derived:cost_center"
+    required: true
+  - key: "environment"
+    description: "Deployment environment (dev/staging/prod)"
+    value_source: "environment"
+    required: true
+  - key: "change_ticket"
+    description: "ServiceNow change ticket number"
+    value_source: "change_ticket"
+    required: true
+  - key: "expiry"
+    description: "Optional lifecycle expiry date (YYYY-MM-DD)"
+    value_source: "expiry_date"
+    required: false
+  - key: "sba_instance_id"
+    description: "Unique run identifier (primary lookup key for idempotency)"
+    value_source: "sba_instance_id"
+    required: true
+
+# Optional labels (applied if values are available).
+gcp_optional_labels:
+  - key: "app_tier"
+    description: "Application tier (web/app/db)"
+    value_source: "app_tier"
+  - key: "os_family"
+    description: "OS family (rhel9/ubuntu2204/windows2022)"
+    value_source: "os_family"
+  - key: "managed_by"
+    description: "Automation platform identifier"
+    value_source: "static:sba"
+
+# Annotations (mutable, applied after instance creation).
+# Used for audit trail and operational metadata.
+gcp_annotations:
+  - key: "requestor"
+    description: "Requestor who initiated the build"
+    value_source: "requestor"
+  - key: "change_ticket"
+    description: "ServiceNow change ticket number"
+    value_source: "change_ticket"
+  - key: "provisioned_at"
+    description: "ISO8601 timestamp of provisioning"
+    value_source: "timestamp:now"
+  - key: "provisioned_by"
+    description: "Automation identity (GitHub Actions / AAP / local)"
+    value_source: "static:sba-automation"
+  - key: "sba_run_id"
+    description: "Unique run identifier (same as sba_instance_id)"
+    value_source: "sba_instance_id"
+
+# Cost center derivation logic.
+# Maps app_tier + environment → cost center code.
+# This is a placeholder — replace with actual cost center mapping.
+gcp_cost_center_map:
+  dev:
+    web: "CC-DEV-WEB"
+    app: "CC-DEV-APP"
+    db: "CC-DEV-DB"
+  staging:
+    web: "CC-STAGING-WEB"
+    app: "CC-STAGING-APP"
+    db: "CC-STAGING-DB"
+  prod:
+    web: "CC-PROD-WEB"
+    app: "CC-PROD-APP"
+    db: "CC-PROD-DB"
+
+# Naming convention for VM instances.
+# sba_name must be ≤ 15 chars, lowercase, alphanumeric + hyphen.
+# Pattern: sba-{env}-{tier}-{os}-{seq}
+# Example: sba-dev-web-r9-001
+gcp_naming_convention:
+  pattern: "sba-{environment}-{app_tier}-{os_short}-{sequence}"
+  max_length: 15
+  os_short_map:
+    rhel9: "r9"
+    ubuntu2204: "u22"
+    windows2022: "w22"
+  environment_short_map:
+    dev: "dev"
+    staging: "stg"
+    prod: "prd"
+  app_tier_short_map:
+    web: "web"
+    app: "app"
+    db: "db"
+  sequence_format: "{:03d}"  # 001, 002, ...
+
+# Validation rules for labels/annotations.
+gcp_label_validation:
+  max_labels_per_resource: 64
+  max_label_key_length: 63
+  max_label_value_length: 63
+  key_regex: "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$"
+  value_regex: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  reserved_prefixes: ["gcp-", "goog-", "k8s-", "kube-"]
+
+gcp_annotation_validation:
+  max_annotations_per_resource: 64
+  max_annotation_key_length: 128
+  max_annotation_value_length: 256
+  key_regex: "^[a-z]([a-z0-9-]{0,126}[a-z0-9])?$"

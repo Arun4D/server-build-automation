@@ -1,0 +1,51 @@
+---
+# Cloud GCP VM Role Internal Variables
+# Constants and derived values used internally by the role.
+
+# Provider identifier
+gcp_provider: "gcp"
+
+# Supported operations
+gcp_supported_operations:
+  - "provision"
+  - "get"
+  - "validate"
+  - "destroy"
+  - "tag"
+
+# API endpoints
+gcp_compute_api: "compute.googleapis.com"
+
+# Default labels that must be present
+gcp_mandatory_label_keys:
+  - "owner"
+  - "cost_center"
+  - "environment"
+  - "change_ticket"
+  - "sba_instance_id"
+
+# Default annotation keys
+gcp_default_annotation_keys:
+  - "requestor"
+  - "change_ticket"
+  - "provisioned_at"
+  - "provisioned_by"
+  - "sba_run_id"
+
+# Shielded VM defaults
+gcp_shielded_defaults:
+  enable_secure_boot: true
+  enable_vtpm: true
+  enable_integrity_monitoring: true
+
+# Metadata defaults
+gcp_metadata_defaults:
+  ssh-keys: ""
+  block-project-ssh-keys: "true"
+
+# Status values
+gcp_instance_status_running: "RUNNING"
+gcp_instance_status_terminated: "TERMINATED"
+gcp_instance_status_stopping: "STOPPING"
+gcp_instance_status_provisioning: "PROVISIONING"
+gcp_instance_status_staging: "STAGING"

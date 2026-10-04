@@ -1,0 +1,149 @@
+---
+# GCP VM Provisioning Playbook
+# Entry point for provisioning GCP VMs via the provider_dispatch abstraction.
+# Invoked by: GitHub Actions, AAP Job Template, CLI
+# Input: 8 variables (cloud, environment, os_family, app_tier, vm_count, requestor, change_ticket, expiry_date)
+
+- name: Provision GCP VMs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    # Load input schema for validation
+    gcp_input_schema: "{{ lookup('file', playbook_dir ~ '/../schemas/gcp-input-vars.schema.json') | from_json }}"
+
+  pre_tasks:
+    - name: "Provision — Validate input variables against JSONSchema"
+      ansible.builtin.assert:
+        that:
+          - cloud is defined
+          - cloud == "gcp"
+          - environment is defined
+          - environment in ['dev', 'staging', 'prod']
+          - os_family is defined
+          - os_family in ['rhel9', 'ubuntu2204', 'windows2022']
+          - app_tier is defined
+          - app_tier in ['web', 'app', 'db']
+          - vm_count is defined
+          - vm_count | int >= 1
+          - vm_count | int <= 20
+          - requestor is defined
+          - requestor | length > 0
+          - requestor | regex_search('^[a-zA-Z0-9._-]{1,64}$')
+          - change_ticket is defined
+          - change_ticket | regex_search('^CHG[0-9]{7,}$')
+          - (expiry_date is not defined) or (expiry_date | length == 0) or (expiry_date | regex_search('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        fail_msg: |
+          Input validation failed. Required variables:
+          - cloud: must be 'gcp' (Phase 1 only)
+          - environment: dev|staging|prod
+          - os_family: rhel9|ubuntu2204|windows2022
+          - app_tier: web|app|db
+          - vm_count: 1-20
+          - requestor: alphanumeric + ._- (1-64 chars)
+          - change_ticket: CHG######## format
+          - expiry_date: optional, YYYY-MM-DD format
+        quiet: true
+      tags: [provision, validate]
+
+    - name: "Provision — Generate sba_instance_id if not provided"
+      ansible.builtin.set_fact:
+        sba_instance_id: "{{ sba_instance_id | default(uuid | string) }}"
+      tags: [provision, validate]
+
+    - name: "Provision — Load GCP lookup tables from group_vars"
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+        name: "{{ item | basename | regex_replace('\\.yml$', '') }}"
+      loop:
+        - "{{ playbook_dir }}/../group_vars/all/gcp_project_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_region_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_image_family_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_subnet_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_machine_type_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_zone_map.yml"
+        - "{{ playbook_dir }}/../group_vars/all/gcp_tag_policy.yml"
+      tags: [provision, lookup]
+
+    - name: "Provision — Debug input parameters"
+      ansible.builtin.debug:
+        msg: |
+          Provisioning {{ vm_count }} VM(s):
+          cloud={{ cloud }}
+          environment={{ environment }}
+          os_family={{ os_family }}
+          app_tier={{ app_tier }}
+          requestor={{ requestor }}
+          change_ticket={{ change_ticket }}
+          expiry_date={{ expiry_date | default('not set') }}
+          sba_instance_id={{ sba_instance_id }}
+      tags: [provision, validate]
+
+  roles:
+    - role: provider_dispatch
+      vars:
+        cloud: "{{ cloud }}"
+        environment: "{{ environment }}"
+        os_family: "{{ os_family }}"
+        app_tier: "{{ app_tier }}"
+        vm_count: "{{ vm_count }}"
+        requestor: "{{ requestor }}"
+        change_ticket: "{{ change_ticket }}"
+        expiry_date: "{{ expiry_date | default(omit) }}"
+        sba_operation: "provision"
+        sba_instance_id: "{{ sba_instance_id }}"
+      tags: [provision, dispatch]
+
+  post_tasks:
+    - name: "Provision — Add provisioned hosts to dynamic inventory group"
+      ansible.builtin.add_host:
+        name: "{{ sba_facts.server.instance_name }}"
+        groups: gcp_servers, "{{ app_tier }}_servers"
+        ansible_host: "{{ sba_facts.network.private_ip }}"
+        ansible_user: "{{ 'sba' if os_family != 'windows2022' else 'admin' }}"
+        ansible_port: "{{ 22 if os_family != 'windows2022' else 5986 }}"
+        ansible_connection: "{{ 'ssh' if os_family != 'windows2022' else 'winrm' }}"
+        sba_instance_id: "{{ sba_facts.server.instance_id }}"
+        sba_fqdn: "{{ sba_facts.server.fqdn }}"
+        sba_private_ip: "{{ sba_facts.network.private_ip }}"
+        sba_public_ip: "{{ sba_facts.network.public_ip | default('') }}"
+        sba_zone: "{{ sba_facts.server.zone }}"
+        sba_region: "{{ sba_facts.server.region }}"
+      when: sba_facts is defined and sba_facts.server is defined
+      tags: [provision, inventory]
+
+    - name: "Provision — Output provisioning summary"
+      ansible.builtin.debug:
+        msg: |
+          Provisioning complete for {{ vm_count }} VM(s):
+          Instance ID: {{ sba_facts.server.instance_id }}
+          Name: {{ sba_facts.server.instance_name }}
+          State: {{ sba_facts.server.state }}
+          Private IP: {{ sba_facts.network.private_ip }}
+          Public IP: {{ sba_facts.network.public_ip | default('none') }}
+          FQDN: {{ sba_facts.server.fqdn }}
+          Zone: {{ sba_facts.server.zone }}
+          Adopted: {{ sba_facts.server.adopted }}
+      when: sba_facts is defined
+      tags: [provision, summary]
+
+    - name: "Provision — Save run result for downstream playbooks"
+      ansible.builtin.copy:
+        content: |
+          {
+            "instance_id": "{{ sba_facts.server.instance_id }}",
+            "instance_name": "{{ sba_facts.server.instance_name }}",
+            "private_ip": "{{ sba_facts.network.private_ip }}",
+            "public_ip": "{{ sba_facts.network.public_ip | default('') }}",
+            "fqdn": "{{ sba_facts.server.fqdn }}",
+            "zone": "{{ sba_facts.server.zone }}",
+            "region": "{{ sba_facts.server.region }}",
+            "status": "{{ sba_result.status }}",
+            "changed": {{ sba_result.changed | lower }}
+          }
+        dest: "{{ playbook_dir }}/../.run_result_{{ sba_instance_id }}.json"
+        mode: "0600"
+      when: sba_facts is defined
+      delegate_to: localhost
+      tags: [provision, result]

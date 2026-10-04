@@ -1,0 +1,14 @@
+---
+# Post-Build Agent Install Role Defaults - STUB
+# Defaults for agent install configuration (when implemented).
+
+# Agent install operation
+agent_install_operation: "install"
+
+# Retry settings
+agent_install_retry_attempts: 3
+agent_install_retry_delay: 15
+
+# Verification
+agent_install_verify: true
+agent_install_verify_timeout: 300

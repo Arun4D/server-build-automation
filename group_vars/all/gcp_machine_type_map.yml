@@ -1,0 +1,60 @@
+# GCP Machine Type Map
+# Maps app_tier + size_profile → GCP machine type.
+# Used by: roles/cloud_gcp_vm/tasks/create_instance.yml
+# Size profiles allow scaling within a tier without changing app_tier.
+# All values are standard GCP machine types (no custom types in Phase 1).
+
+gcp_machine_type_map:
+  web:
+    small: "e2-standard-2"    # 2 vCPU, 8 GB
+    medium: "e2-standard-4"   # 4 vCPU, 16 GB
+    large: "e2-standard-8"    # 8 vCPU, 32 GB
+  app:
+    small: "e2-standard-2"    # 2 vCPU, 8 GB
+    medium: "e2-standard-4"   # 4 vCPU, 16 GB
+    large: "e2-standard-8"    # 8 vCPU, 32 GB
+  db:
+    small: "e2-standard-4"    # 4 vCPU, 16 GB
+    medium: "e2-highmem-4"    # 4 vCPU, 32 GB
+    large: "e2-highmem-8"     # 8 vCPU, 64 GB
+
+# Default size profile per app_tier (used when not specified).
+gcp_default_size_profile:
+  web: "medium"
+  app: "medium"
+  db: "medium"
+
+# Machine type metadata for validation and documentation.
+gcp_machine_type_metadata:
+  e2-standard-2:
+    vcpu: 2
+    memory_gb: 8
+    series: "E2 (shared-core, cost-optimized)"
+    supports_shielded_vm: true
+  e2-standard-4:
+    vcpu: 4
+    memory_gb: 16
+    series: "E2 (shared-core, cost-optimized)"
+    supports_shielded_vm: true
+  e2-standard-8:
+    vcpu: 8
+    memory_gb: 32
+    series: "E2 (shared-core, cost-optimized)"
+    supports_shielded_vm: true
+  e2-highmem-4:
+    vcpu: 4
+    memory_gb: 32
+    series: "E2 (high memory)"
+    supports_shielded_vm: true
+  e2-highmem-8:
+    vcpu: 8
+    memory_gb: 64
+    series: "E2 (high memory)"
+    supports_shielded_vm: true
+
+# Future: compute-optimized (C2, C3) and memory-optimized (M1, M2) for specialized workloads.
+# gcp_machine_type_map:
+#   app:
+#     compute_large: "c2-standard-8"
+#   db:
+#     memory_xlarge: "m1-ultramem-40"

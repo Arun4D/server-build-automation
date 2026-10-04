@@ -1,0 +1,47 @@
+# GCP Image Family Map
+# Maps os_family → GCP image family self_link.
+# Used by: roles/cloud_gcp_vm/tasks/resolve_image.yml
+# At provision time, the family ref is resolved to a pinned image self_link via gcp_compute_image_info.
+# The pinned self_link is recorded in sba_facts.image.applied_image_id for idempotency verification.
+# All image families are in the golden images project (sbagoldimages).
+# Never commit real project IDs — use placeholders.
+
+gcp_image_family_map:
+  rhel9: "projects/<gcp-golden-images-project>/global/images/family/rhel-9-gold"
+  ubuntu2204: "projects/<gcp-golden-images-project>/global/images/family/ubuntu-2204-lts-gold"
+  windows2022: "projects/<gcp-golden-images-project>/global/images/family/windows-2022-gold"
+
+# Image family metadata for validation and documentation.
+gcp_image_family_metadata:
+  rhel9:
+    os_family: "RedHat"
+    os_version: "9.x"
+    architecture: "x86_64"
+    guest_os_features: ["UEFI_COMPATIBLE", "VIRTIO_SCSI_MULTIQUEUE"]
+    description: "RHEL 9 golden image, updated monthly"
+  ubuntu2204:
+    os_family: "Debian"
+    os_version: "22.04 LTS"
+    architecture: "x86_64"
+    guest_os_features: ["UEFI_COMPATIBLE", "VIRTIO_SCSI_MULTIQUEUE"]
+    description: "Ubuntu 22.04 LTS golden image, updated monthly"
+  windows2022:
+    os_family: "Windows"
+    os_version: "2022"
+    architecture: "x86_64"
+    guest_os_features: ["UEFI_COMPATIBLE", "VIRTIO_SCSI_MULTIQUEUE", "WINDOWS"]
+    description: "Windows Server 2022 golden image, updated monthly"
+
+# Pinned image references (for reference/audit — not used directly by role).
+# These are the specific image versions that were current at the time of writing.
+# The role resolves the family to the current pinned image at provision time.
+gcp_pinned_image_references:
+  rhel9:
+    example: "projects/<gcp-golden-images-project>/global/images/rhel-9-gold-v20260901"
+    build_date: "2026-09-01"
+  ubuntu2204:
+    example: "projects/<gcp-golden-images-project>/global/images/ubuntu-2204-lts-gold-v20260901"
+    build_date: "2026-09-01"
+  windows2022:
+    example: "projects/<gcp-golden-images-project>/global/images/windows-2022-gold-v20260901"
+    build_date: "2026-09-01"

@@ -1,0 +1,44 @@
+---
+# GCP VM Lookup Instance by sba_instance_id Label
+# Finds existing instance with the matching sba_instance_id label.
+# Returns found: yes/no and instance details if found.
+
+- name: "GCP Lookup — List instances with sba_instance_id label"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    filter: "labels.sba_instance_id = {{ sba_instance_id }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_instances_by_label
+  changed_when: false
+  tags: [cloud_gcp_vm, lookup]
+
+- name: "GCP Lookup — Set found fact"
+  ansible.builtin.set_fact:
+    gcp_instance_found: "{{ gcp_instances_by_label.resources | length > 0 }}"
+    gcp_instance_count: "{{ gcp_instances_by_label.resources | length }}"
+    gcp_existing_instance: "{{ gcp_instances_by_label.resources[0] if gcp_instances_by_label.resources | length > 0 else {} }}"
+  tags: [cloud_gcp_vm, lookup]
+
+- name: "GCP Lookup — Assert not ambiguous (more than one instance with same label)"
+  ansible.builtin.assert:
+    that:
+      - gcp_instance_count <= 1
+    fail_msg: |
+      AMBIGUOUS_RESOURCE: Found {{ gcp_instance_count }} instances with label sba_instance_id={{ sba_instance_id }}.
+      Expected 0 or 1. Manual intervention required.
+    quiet: true
+  tags: [cloud_gcp_vm, lookup]
+
+- name: "GCP Lookup — Debug found instance"
+  ansible.builtin.debug:
+    msg: "Found existing instance: {{ gcp_existing_instance.name }} ({{ gcp_existing_instance.id }})"
+  when: gcp_instance_found
+  tags: [cloud_gcp_vm, lookup]
+
+- name: "GCP Lookup — Debug no instance found"
+  ansible.builtin.debug:
+    msg: "No existing instance found with label sba_instance_id={{ sba_instance_id }}"
+  when: not gcp_instance_found
+  tags: [cloud_gcp_vm, lookup]

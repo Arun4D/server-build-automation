@@ -1,0 +1,40 @@
+---
+# GCP VM Attach Networking
+# Configures NIC, subnet, external IP policy, and firewall/security group.
+# For GCP, networking is mostly configured at instance creation time.
+# This task handles post-creation networking adjustments if needed.
+
+- name: "GCP Networking — Verify NIC configuration matches requested subnet"
+  ansible.builtin.assert:
+    that:
+      - gcp_create_result.instance.networkInterfaces[0].subnetwork == gcp_subnet
+    fail_msg: "Instance NIC subnet does not match requested subnet"
+    quiet: true
+  tags: [cloud_gcp_vm, networking]
+
+- name: "GCP Networking — Verify external IP policy"
+  ansible.builtin.assert:
+    that:
+      - (gcp_create_result.instance.networkInterfaces[0].accessConfigs | length > 0) == (gcp_allow_external_ip | default(false))
+    fail_msg: "Instance external IP configuration does not match policy"
+    quiet: true
+  tags: [cloud_gcp_vm, networking]
+
+- name: "GCP Networking — Record NIC details"
+  ansible.builtin.set_fact:
+    gcp_nic_name: "{{ gcp_create_result.instance.networkInterfaces[0].name }}"
+    gcp_nic_subnetwork: "{{ gcp_create_result.instance.networkInterfaces[0].subnetwork }}"
+    gcp_nic_network: "{{ gcp_create_result.instance.networkInterfaces[0].network }}"
+    gcp_nic_network_ip: "{{ gcp_create_result.instance.networkInterfaces[0].networkIP }}"
+    gcp_nic_external_ip: "{{ gcp_create_result.instance.networkInterfaces[0].accessConfigs[0].natIP if (gcp_create_result.instance.networkInterfaces[0].accessConfigs | length > 0) else '' }}"
+  tags: [cloud_gcp_vm, networking]
+
+- name: "GCP Networking — Debug NIC info"
+  ansible.builtin.debug:
+    msg: "NIC: {{ gcp_nic_name }}, Subnet: {{ gcp_nic_subnetwork }}, Private IP: {{ gcp_nic_network_ip }}{{ ', External IP: ' ~ gcp_nic_external_ip if gcp_nic_external_ip else '' }}"
+  tags: [cloud_gcp_vm, networking]
+
+- name: "GCP Networking — Apply firewall rules if specified (placeholder for future)"
+  ansible.builtin.debug:
+    msg: "Firewall rule attachment not implemented in Phase 1; subnets pre-configured with firewall rules"
+  tags: [cloud_gcp_vm, networking]

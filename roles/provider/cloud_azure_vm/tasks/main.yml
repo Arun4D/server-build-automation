@@ -1,0 +1,23 @@
+---
+# Cloud Azure VM Role - STUB
+# Phase 1: Azure provider not yet implemented.
+# This stub exists to maintain the provider contract interface.
+# The provider_dispatch role routes 'azure' here, which fails fast with a clear message.
+
+- name: "Azure VM — STUB: Azure provider not yet enabled in this phase"
+  ansible.builtin.fail:
+    msg: |
+      Azure provider (cloud_azure_vm) is not yet enabled in Phase 1.
+      
+      This is a stub role that maintains the identical variable interface as cloud_gcp_vm
+      so the provider abstraction holds for future implementation.
+      
+      To enable Azure:
+      1. Replace this task with full implementation following the provider contract
+      2. Implement the 6 task groups: lookup, create/adopt, converge, post-provision, decommission, verify
+      3. Add Azure lookup tables in group_vars/all/ (azure_project_map, azure_region_map, etc.)
+      4. Add azure.azcollection to collections/requirements.yml (already present)
+      5. Update provider_dispatch to route 'azure' to this role (already configured)
+      
+      Provider contract reference: docs/architecture/provider-abstraction.md
+  tags: [cloud_azure_vm, stub]

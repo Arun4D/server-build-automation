@@ -1,0 +1,28 @@
+---
+# Cloud GCP VM Role Handlers
+# Handlers for notifications from tasks.
+
+- name: "GCP Handler — Instance created"
+  ansible.builtin.debug:
+    msg: "Handler: Instance {{ sba_name }} created in {{ gcp_project }}/{{ gcp_zone }}"
+  listen: "gcp instance created"
+
+- name: "GCP Handler — Instance adopted"
+  ansible.builtin.debug:
+    msg: "Handler: Instance {{ sba_name }} adopted in {{ gcp_project }}/{{ gcp_zone }}"
+  listen: "gcp instance adopted"
+
+- name: "GCP Handler — Instance deleted"
+  ansible.builtin.debug:
+    msg: "Handler: Instance {{ sba_name }} deleted from {{ gcp_project }}/{{ gcp_zone }}"
+  listen: "gcp instance deleted"
+
+- name: "GCP Handler — Labels updated"
+  ansible.builtin.debug:
+    msg: "Handler: Labels updated for instance {{ sba_name }}"
+  listen: "gcp labels updated"
+
+- name: "GCP Handler — Machine type changed"
+  ansible.builtin.debug:
+    msg: "Handler: Machine type changed for instance {{ sba_name }}"
+  listen: "gcp machine type changed"

@@ -1,0 +1,64 @@
+---
+# AAP Job Template: Post-Build Agent Install (GCP)
+# Survey includes instance_id from provision + agent parameters.
+# Targets hosts via GCP dynamic inventory.
+
+job_template:
+  name: "Post-Build Agent Install (GCP)"
+  description: "Installs monitoring/security agents on provisioned GCP VMs"
+  job_type: "run"
+  inventory: "GCP Dynamic Inventory"
+  project: "Server Build Automation"
+  playbook: "playbooks/post_build_agent_install.yml"
+  credentials:
+    - "GCP Service Account - Dev"
+    - "GCP Service Account - Staging"
+    - "GCP Service Account - Prod"
+    - "Agent Configuration Credentials"  # Separate credential for agent API keys/tokens
+  execution_environment: "Server Build Automation EE"
+  fork_limit: 20
+  timeout: 1800
+  verbosity: 2
+  become_enabled: true
+  ask_variables_on_launch: true
+  survey_enabled: true
+  survey_spec:
+    - name: "sba_instance_id"
+      question: "Instance ID (from Provision Run)"
+      type: "text"
+      required: true
+      min_length: 36
+      max_length: 36
+      help_text: "Unique run identifier from provision step (UUID format)"
+    - name: "agent_type"
+      question: "Agent Type"
+      type: "multiplechoice"
+      required: true
+      default: "dynatrace"
+      choices:
+        - "dynatrace"
+        - "datadog"
+        - "crowdstrike"
+        - "other"
+      help_text: "Type of agent to install (decision pending - see open questions)"
+    - name: "agent_install_method"
+      question: "Installation Method"
+      type: "multiplechoice"
+      required: true
+      default: "package"
+      choices:
+        - "package"
+        - "script"
+        - "container"
+      help_text: "Installation method (decision pending - see open questions)"
+    - name: "agent_config"
+      question: "Agent Configuration (JSON)"
+      type: "textarea"
+      required: true
+      help_text: "Agent-specific configuration (tenant, API key, policy, etc.) as JSON"
+  extra_vars: {}
+  labels:
+    - "gcp"
+    - "post-build"
+    - "agent-install"
+    - "phase1"

@@ -1,0 +1,23 @@
+---
+# GCP VM Resolve Image Family to Pinned Self Link
+# The image family was already resolved in preflight; this task just ensures
+# the fact is set and available for create_instance.
+
+- name: "GCP Resolve Image — Ensure pinned image self_link is set"
+  ansible.builtin.assert:
+    that:
+      - gcp_pinned_image_self_link is defined
+      - gcp_pinned_image_self_link | length > 0
+    fail_msg: "Pinned image self_link not resolved. Preflight must run first."
+    quiet: true
+  tags: [cloud_gcp_vm, image]
+
+- name: "GCP Resolve Image — Debug resolved image"
+  ansible.builtin.debug:
+    msg: "Resolved image family {{ gcp_image_family }} to pinned image: {{ gcp_pinned_image_self_link }}"
+  tags: [cloud_gcp_vm, image]
+
+- name: "GCP Resolve Image — Set image reference for create task"
+  ansible.builtin.set_fact:
+    gcp_image_reference: "{{ gcp_pinned_image_self_link }}"
+  tags: [cloud_gcp_vm, image]

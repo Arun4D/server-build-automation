@@ -1,0 +1,96 @@
+---
+# AAP Job Template: Provision GCP VMs
+# Survey limited to the 8 input variables per the provider contract.
+# Uses GCP Service Account credential for authentication.
+
+job_template:
+  name: "Provision GCP VMs"
+  description: "Provisions GCP Compute Engine instances from golden images via the unified provider contract"
+  job_type: "run"
+  inventory: ""  # Runs on localhost (controller)
+  project: "Server Build Automation"
+  playbook: "playbooks/provision.yml"
+  credentials:
+    - "GCP Service Account - Dev"
+    - "GCP Service Account - Staging"
+    - "GCP Service Account - Prod"
+  execution_environment: "Server Build Automation EE"
+  fork_limit: 20
+  timeout: 3600
+  verbosity: 2
+  become_enabled: false
+  ask_variables_on_launch: true
+  survey_enabled: true
+  survey_spec:
+    - name: "cloud"
+      question: "Target Cloud Provider"
+      type: "multiplechoice"
+      required: true
+      default: "gcp"
+      choices:
+        - "gcp"
+      help_text: "Phase 1 only supports GCP"
+    - name: "environment"
+      question: "Deployment Environment"
+      type: "multiplechoice"
+      required: true
+      default: "dev"
+      choices:
+        - "dev"
+        - "staging"
+        - "prod"
+      help_text: "Maps to GCP project, network, subnet, and service account"
+    - name: "os_family"
+      question: "OS Family/Version"
+      type: "multiplechoice"
+      required: true
+      default: "rhel9"
+      choices:
+        - "rhel9"
+        - "ubuntu2204"
+        - "windows2022"
+      help_text: "Maps to GCP image family via lookup table"
+    - name: "app_tier"
+      question: "Application Tier"
+      type: "multiplechoice"
+      required: true
+      default: "web"
+      choices:
+        - "web"
+        - "app"
+        - "db"
+      help_text: "Maps to subnet, machine type, security policy, and cost center"
+    - name: "vm_count"
+      question: "Number of VMs"
+      type: "integer"
+      required: true
+      default: 1
+      minimum: 1
+      maximum: 20
+      help_text: "Phase 1 uses direct gcp_compute_instance loop; >20 may need MIG in future"
+    - name: "requestor"
+      question: "Requestor (ServiceNow User)"
+      type: "text"
+      required: true
+      min_length: 1
+      max_length: 64
+      help_text: "Used for 'owner' label and audit trail (alphanumeric + ._-)"
+    - name: "change_ticket"
+      question: "Change Ticket (ServiceNow CHG)"
+      type: "text"
+      required: true
+      min_length: 10
+      max_length: 20
+      help_text: "Required for 'change_ticket' label and audit trail (format: CHG########)"
+    - name: "expiry_date"
+      question: "Expiry Date (Optional)"
+      type: "text"
+      required: false
+      default: ""
+      help_text: "Optional lifecycle expiry date (YYYY-MM-DD). Used for 'expiry' label."
+  extra_vars:
+    sba_operation: "provision"
+  labels:
+    - "gcp"
+    - "provision"
+    - "phase1"

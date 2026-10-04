@@ -1,0 +1,94 @@
+---
+# Cloud Azure VM Argument Specifications - STUB
+# MUST BE IDENTICAL to provider_dispatch, cloud_gcp_vm, and cloud_aws_vm
+# This is the provider contract - all provider roles accept the same 8 variables.
+
+argument_specs:
+  main:
+    short_description: Azure VM provisioning role (STUB - not yet implemented)
+    description:
+      - Provisions, manages, and destroys Azure Virtual Machines from golden images.
+      - Implements the provider contract from docs/architecture/provider-abstraction.md.
+      - PHASE 1: This is a stub. Azure provider not yet enabled.
+    options:
+      cloud:
+        type: str
+        required: true
+        choices: ['gcp', 'azure', 'aws']
+        description:
+          - Target cloud provider.
+          - This role only handles 'azure'; other values should be routed by provider_dispatch.
+      environment:
+        type: str
+        required: true
+        choices: ['dev', 'staging', 'prod']
+        description:
+          - Deployment environment.
+          - Maps to Azure subscription, resource group, vnet, subnet via lookup tables.
+      os_family:
+        type: str
+        required: true
+        choices: ['rhel9', 'ubuntu2204', 'windows2022']
+        description:
+          - OS family/version.
+          - Maps to Azure image via azure_image_map.
+      app_tier:
+        type: str
+        required: true
+        choices: ['web', 'app', 'db']
+        description:
+          - Application tier.
+          - Maps to subnet, VM size, security policy, and cost center via lookup tables.
+      vm_count:
+        type: int
+        required: true
+        default: 1
+        description:
+          - Number of VMs to provision.
+      requestor:
+        type: str
+        required: true
+        description:
+          - ServiceNow user who requested the build.
+          - Used for 'owner' tag and audit trail.
+        pattern: '^[a-zA-Z0-9._-]{1,64}$'
+      change_ticket:
+        type: str
+        required: true
+        description:
+          - ServiceNow change ticket number.
+          - Required for 'change_ticket' tag and audit trail.
+        pattern: '^CHG[0-9]{7,}$'
+      expiry_date:
+        type: str
+        required: false
+        description:
+          - Optional lifecycle expiry date (YYYY-MM-DD).
+          - Used for 'expiry' tag. If omitted, no expiry tag applied.
+        format: date
+      sba_operation:
+        type: str
+        required: false
+        default: 'provision'
+        choices: ['provision', 'get', 'validate', 'destroy', 'tag']
+        description:
+          - Operation to perform on the cloud provider.
+      sba_instance_id:
+        type: str
+        required: false
+        description:
+          - Unique run identifier (UUID or ServiceNow sys_id).
+          - If omitted, generated as UUID.
+          - Used as primary lookup key (tag) for idempotency.
+      sba_name:
+        type: str
+        required: false
+        description:
+          - Short name for the VM (≤15 chars, lowercase).
+          - If omitted, generated from naming convention.
+      sba_fqdn:
+        type: str
+        required: false
+        description:
+          - Fully qualified domain name.
+          - If omitted, defaults to sba_name + '.internal'.

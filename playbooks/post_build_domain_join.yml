@@ -1,0 +1,76 @@
+---
+# Post-Build Domain Join Playbook (GCP Path)
+# Joins provisioned GCP VMs to Active Directory domain.
+# Invoked independently after provision.yml completes.
+# Targets hosts in 'gcp_servers' dynamic inventory group (or via add_host from provision run).
+
+- name: Post-Build Domain Join (GCP)
+  hosts: gcp_servers
+  gather_facts: true
+  become: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    # Domain join configuration (to be provided via survey/extra vars)
+    # domain_controller: "dc.example.com"
+    # domain_realm: "EXAMPLE.COM"
+    # domain_ou: "OU=Servers,OU={{ environment }},DC=example,DC=com"
+    # domain_join_user: "{{ vault_domain_join_user }}"
+    # domain_join_password: "{{ vault_domain_join_password }}"
+
+  pre_tasks:
+    - name: "Domain Join — Validate required variables"
+      ansible.builtin.assert:
+        that:
+          - sba_instance_id is defined
+          - domain_controller is defined
+          - domain_realm is defined
+          - domain_ou is defined
+          - domain_join_user is defined
+          - domain_join_password is defined
+        fail_msg: |
+          Domain join requires the following variables:
+          - sba_instance_id (from provision run)
+          - domain_controller (AD DC FQDN)
+          - domain_realm (Kerberos realm, e.g., EXAMPLE.COM)
+          - domain_ou (OU path for computer object)
+          - domain_join_user (account with join permissions)
+          - domain_join_password (credential for join account)
+        quiet: true
+      tags: [domain_join, validate]
+
+    - name: "Domain Join — Debug target host"
+      ansible.builtin.debug:
+        msg: "Joining {{ inventory_hostname }} ({{ ansible_host }}) to domain {{ domain_realm }}"
+      tags: [domain_join, validate]
+
+  roles:
+    - role: postbuild_domain_join
+      vars:
+        sba_instance_id: "{{ sba_instance_id }}"
+        domain_controller: "{{ domain_controller }}"
+        domain_realm: "{{ domain_realm }}"
+        domain_ou: "{{ domain_ou }}"
+        domain_join_user: "{{ domain_join_user }}"
+        domain_join_password: "{{ domain_join_password }}"
+      tags: [domain_join]
+
+  post_tasks:
+    - name: "Domain Join — Verify domain membership"
+      ansible.builtin.command: realm list
+      register: realm_list
+      changed_when: false
+      failed_when: false
+      tags: [domain_join, verify]
+
+    - name: "Domain Join — Assert domain joined"
+      ansible.builtin.assert:
+        that:
+          - realm_list.stdout is search(domain_realm)
+        fail_msg: "Domain join verification failed for {{ inventory_hostname }}"
+        quiet: true
+      tags: [domain_join, verify]
+
+    - name: "Domain Join — Output result"
+      ansible.builtin.debug:
+        msg: "Domain join complete for {{ inventory_hostname }}: {{ 'SUCCESS' if realm_list.stdout is search(domain_realm) else 'FAILED' }}"
+      tags: [domain_join, summary]

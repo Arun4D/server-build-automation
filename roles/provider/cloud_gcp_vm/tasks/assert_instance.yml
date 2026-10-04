@@ -1,0 +1,99 @@
+---
+# GCP VM Assert Instance Postconditions
+# Verifies the instance exists and matches expected state.
+# Used by provision, get, validate, and tag operations.
+
+- name: "GCP Assert — Get current instance state"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    name: "{{ sba_name }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_assert_instance
+  changed_when: false
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert instance exists"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources | length == 1
+    fail_msg: "Instance {{ sba_name }} not found in project {{ gcp_project }} zone {{ gcp_zone }}"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert instance is RUNNING"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].status == "RUNNING"
+    fail_msg: "Instance {{ sba_name }} is not RUNNING (status: {{ gcp_assert_instance.resources[0].status }})"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert labels match (required labels)"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].labels.owner == requestor
+      - gcp_assert_instance.resources[0].labels.cost_center == gcp_cost_center_map[environment][app_tier]
+      - gcp_assert_instance.resources[0].labels.environment == environment
+      - gcp_assert_instance.resources[0].labels.change_ticket == change_ticket
+      - gcp_assert_instance.resources[0].labels.sba_instance_id == sba_instance_id
+    fail_msg: "Instance labels do not match expected values"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert expiry label if provided"
+  ansible.builtin.assert:
+    that:
+      - (expiry_date is not defined or expiry_date | length == 0) or
+        (gcp_assert_instance.resources[0].labels.expiry == expiry_date)
+    fail_msg: "Instance expiry label does not match expected value"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert machine type matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].machineType | regex_replace('.*/([^/]+)$', '\\1') == (gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1'))
+    fail_msg: "Instance machine type does not match expected value"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert subnet matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].networkInterfaces[0].subnetwork == gcp_subnet
+    fail_msg: "Instance subnet does not match expected value"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert image matches (pinned)"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].disks[0].source == gcp_image_reference
+    fail_msg: "Instance image does not match expected pinned image"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert service account matches"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].serviceAccounts[0].email == gcp_service_account
+    fail_msg: "Instance service account does not match expected value"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Assert shielded VM config"
+  ansible.builtin.assert:
+    that:
+      - gcp_assert_instance.resources[0].shieldedInstanceConfig.enableSecureBoot == (gcp_shielded_secure_boot | default(true))
+      - gcp_assert_instance.resources[0].shieldedInstanceConfig.enableVtpm == (gcp_shielded_vtpm | default(true))
+      - gcp_assert_instance.resources[0].shieldedInstanceConfig.enableIntegrityMonitoring == (gcp_shielded_integrity_monitoring | default(true))
+    fail_msg: "Instance shielded VM config does not match expected values"
+    quiet: true
+  tags: [cloud_gcp_vm, assert]
+
+- name: "GCP Assert — Debug assertion passed"
+  ansible.builtin.debug:
+    msg: "All postconditions verified for instance {{ sba_name }}"
+  tags: [cloud_gcp_vm, assert]

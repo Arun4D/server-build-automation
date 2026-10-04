@@ -1,0 +1,55 @@
+---
+# Provider Dispatch Defaults
+# Shared defaults for all provider roles (cloud_gcp_vm, cloud_azure_vm, cloud_aws_vm).
+# These match the provider contract defined in docs/architecture/provider-abstraction.md
+
+# Operation to perform
+sba_operation: "provision"
+
+# Retry and timeout settings (shared across all providers)
+sba_retry_attempts: 3
+sba_retry_delay: 5
+sba_delete_timeout: 1800
+sba_wait_ready_timeout: 3600
+
+# Default size profile per app_tier (used when not overridden)
+gcp_default_size_profile:
+  web: "medium"
+  app: "medium"
+  db: "medium"
+
+# Short name mappings for naming convention
+environment_short_map:
+  dev: "dev"
+  staging: "stg"
+  prod: "prd"
+
+app_tier_short_map:
+  web: "web"
+  app: "app"
+  db: "db"
+
+os_short_map:
+  rhel9: "r9"
+  ubuntu2204: "u22"
+  windows2022: "w22"
+
+# Naming convention pattern
+gcp_naming_pattern: "sba-{environment}-{app_tier}-{os_short}-{sequence}"
+gcp_sequence_format: "{:03d}"
+
+# Label/annotation keys (from gcp_tag_policy)
+gcp_required_label_keys:
+  - "owner"
+  - "cost_center"
+  - "environment"
+  - "change_ticket"
+  - "expiry"
+  - "sba_instance_id"
+
+gcp_annotation_keys:
+  - "requestor"
+  - "change_ticket"
+  - "provisioned_at"
+  - "provisioned_by"
+  - "sba_run_id"

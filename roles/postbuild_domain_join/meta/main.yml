@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: postbuild_domain_join
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Post-build domain join role (STUB - Phase 1 not implemented).
+    Joins provisioned VMs to Active Directory domain.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - domain
+    - active-directory
+    - post-build
+    - stub
+
+dependencies: []
+
+collections:
+  - ansible.windows
+  - community.general

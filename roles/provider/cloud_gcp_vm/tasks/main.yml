@@ -1,0 +1,147 @@
+---
+# Cloud GCP VM Role - Main Entry Point
+# Dispatches to the appropriate task file based on sba_operation.
+# Implements the provider contract from docs/architecture/provider-abstraction.md
+
+- name: "GCP VM — Validate required inputs"
+  ansible.builtin.assert:
+    that:
+      - gcp_project is defined and gcp_project | length > 0
+      - gcp_region is defined and gcp_region | length > 0
+      - gcp_zone is defined and gcp_zone | length > 0
+      - gcp_subnet is defined and gcp_subnet | length > 0
+      - gcp_image_family is defined and gcp_image_family | length > 0
+      - gcp_machine_type is defined and gcp_machine_type | length > 0
+      - gcp_service_account is defined and gcp_service_account | length > 0
+      - sba_instance_id is defined and sba_instance_id | length > 0
+      - sba_name is defined and sba_name | length > 0
+    fail_msg: "Missing required GCP VM variables. Check provider_dispatch derivation."
+    quiet: true
+  tags: [cloud_gcp_vm, validate]
+
+- name: "GCP VM — Provision operation"
+  when: sba_operation == 'provision'
+  block:
+    - name: "GCP VM — Run preflight checks"
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [cloud_gcp_vm, provision, preflight]
+
+    - name: "GCP VM — Lookup existing instance by sba_instance_id label"
+      ansible.builtin.import_tasks: lookup_instance.yml
+      tags: [cloud_gcp_vm, provision, lookup]
+
+    - name: "GCP VM — Verify immutable attributes match"
+      ansible.builtin.import_tasks: verify_immutable.yml
+      tags: [cloud_gcp_vm, provision, verify]
+
+    - name: "GCP VM — Resolve image family to pinned self_link"
+      ansible.builtin.import_tasks: resolve_image.yml
+      tags: [cloud_gcp_vm, provision, image]
+
+    - name: "GCP VM — Create or adopt instance"
+      ansible.builtin.import_tasks: create_instance.yml
+      tags: [cloud_gcp_vm, provision, create]
+
+    - name: "GCP VM — Attach networking (NIC, external IP policy)"
+      ansible.builtin.import_tasks: attach_networking.yml
+      tags: [cloud_gcp_vm, provision, networking]
+
+    - name: "GCP VM — Attach storage (boot disk, data disks)"
+      ansible.builtin.import_tasks: attach_storage.yml
+      tags: [cloud_gcp_vm, provision, storage]
+
+    - name: "GCP VM — Record observed provider resource IDs"
+      ansible.builtin.import_tasks: record_observed.yml
+      tags: [cloud_gcp_vm, provision, record]
+
+    - name: "GCP VM — Converge mutable attributes"
+      ansible.builtin.import_tasks: converge_instance.yml
+      tags: [cloud_gcp_vm, provision, converge]
+
+    - name: "GCP VM — Wait for instance ready (RUNNING + guest agent)"
+      ansible.builtin.import_tasks: wait_for_ready.yml
+      tags: [cloud_gcp_vm, provision, wait]
+
+    - name: "GCP VM — Assert postconditions"
+      ansible.builtin.import_tasks: assert_instance.yml
+      tags: [cloud_gcp_vm, provision, assert]
+
+- name: "GCP VM — Get operation (read-only)"
+  when: sba_operation == 'get'
+  block:
+    - name: "GCP VM — Run preflight checks"
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [cloud_gcp_vm, get, preflight]
+
+    - name: "GCP VM — Lookup existing instance"
+      ansible.builtin.import_tasks: lookup_instance.yml
+      tags: [cloud_gcp_vm, get, lookup]
+
+    - name: "GCP VM — Read current instance state"
+      google.cloud.gcp_compute_instance_info:
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        name: "{{ sba_name }}"
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: sba_observed
+      changed_when: false
+      no_log: true
+      tags: [cloud_gcp_vm, get]
+
+    - name: "GCP VM — Assert postconditions"
+      ansible.builtin.import_tasks: assert_instance.yml
+      tags: [cloud_gcp_vm, get, assert]
+
+- name: "GCP VM — Validate operation (read-only, no create)"
+  when: sba_operation == 'validate'
+  block:
+    - name: "GCP VM — Run preflight checks"
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [cloud_gcp_vm, validate, preflight]
+
+    - name: "GCP VM — Lookup existing instance"
+      ansible.builtin.import_tasks: lookup_instance.yml
+      tags: [cloud_gcp_vm, validate, lookup]
+
+    - name: "GCP VM — Verify immutable attributes match"
+      ansible.builtin.import_tasks: verify_immutable.yml
+      tags: [cloud_gcp_vm, validate, verify]
+
+    - name: "GCP VM — Assert postconditions"
+      ansible.builtin.import_tasks: assert_instance.yml
+      tags: [cloud_gcp_vm, validate, assert]
+
+- name: "GCP VM — Destroy operation"
+  when: sba_operation == 'destroy'
+  block:
+    - name: "GCP VM — Run preflight checks"
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [cloud_gcp_vm, destroy, preflight]
+
+    - name: "GCP VM — List owned resources"
+      ansible.builtin.import_tasks: list_owned_resources.yml
+      tags: [cloud_gcp_vm, destroy, list]
+
+    - name: "GCP VM — Delete instance (only if adopted: false)"
+      ansible.builtin.import_tasks: delete_instance.yml
+      tags: [cloud_gcp_vm, destroy, delete]
+
+- name: "GCP VM — Tag operation (labels/annotations only)"
+  when: sba_operation == 'tag'
+  block:
+    - name: "GCP VM — Run preflight checks"
+      ansible.builtin.import_tasks: preflight.yml
+      tags: [cloud_gcp_vm, tag, preflight]
+
+    - name: "GCP VM — Lookup existing instance"
+      ansible.builtin.import_tasks: lookup_instance.yml
+      tags: [cloud_gcp_vm, tag, lookup]
+
+    - name: "GCP VM — Apply annotations (mutable)"
+      ansible.builtin.import_tasks: apply_annotations.yml
+      tags: [cloud_gcp_vm, tag, annotations]
+
+    - name: "GCP VM — Assert postconditions"
+      ansible.builtin.import_tasks: assert_instance.yml
+      tags: [cloud_gcp_vm, tag, assert]

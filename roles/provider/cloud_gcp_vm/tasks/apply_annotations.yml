@@ -1,0 +1,42 @@
+---
+# GCP VM Apply Annotations (Tag Operation)
+# Annotations are mutable and can be updated without reboot.
+# Labels are immutable without stop/start, so only annotations are updated here.
+
+- name: "GCP Annotations — Build annotations dict"
+  ansible.builtin.set_fact:
+    gcp_instance_annotations: |
+      {{
+        {
+          'requestor': requestor,
+          'change_ticket': change_ticket,
+          'provisioned_at': "{{ ansible_date_time.iso8601 }}",
+          'provisioned_by': 'sba-automation',
+          'sba_run_id': sba_instance_id
+        }
+      }}
+  tags: [cloud_gcp_vm, annotations]
+
+- name: "GCP Annotations — Apply annotations to instance"
+  google.cloud.gcp_compute_instance:
+    name: "{{ sba_name }}"
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    metadata:
+      items: |
+        {{
+          (gcp_assert_instance.resources[0].metadata.items | default([])) |
+          rejectattr('key', 'in', gcp_instance_annotations.keys()) |
+          list |
+          combine(gcp_instance_annotations | dict2items | map(attribute='key') | zip(gcp_instance_annotations | dict2items | map(attribute='value')) | map('community.general.dict_kv', 'key', 'value') | list)
+        }}
+    state: present
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_annotation_result
+  tags: [cloud_gcp_vm, annotations]
+
+- name: "GCP Annotations — Debug annotation update"
+  ansible.builtin.debug:
+    msg: "Annotations updated for instance {{ sba_name }}"
+  tags: [cloud_gcp_vm, annotations]

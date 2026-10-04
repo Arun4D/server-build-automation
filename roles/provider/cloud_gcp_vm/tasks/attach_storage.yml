@@ -1,0 +1,70 @@
+---
+# GCP VM Attach Storage
+# Configures boot disk (already done at create) and additional data disks.
+# Data disks are created and attached if specified in gcp_data_disks.
+
+- name: "GCP Storage — Verify boot disk configuration"
+  ansible.builtin.assert:
+    that:
+      - gcp_create_result.instance.disks[0].boot == true
+      - gcp_create_result.instance.disks[0].autoDelete == true
+    fail_msg: "Boot disk configuration mismatch"
+    quiet: true
+  tags: [cloud_gcp_vm, storage]
+
+- name: "GCP Storage — Record boot disk details"
+  ansible.builtin.set_fact:
+    gcp_boot_disk_name: "{{ gcp_create_result.instance.disks[0].deviceName }}"
+    gcp_boot_disk_size_gb: "{{ gcp_create_result.instance.disks[0].diskSizeGb }}"
+    gcp_boot_disk_type: "{{ gcp_create_result.instance.disks[0].type }}"
+    gcp_boot_disk_source: "{{ gcp_create_result.instance.disks[0].source }}"
+  tags: [cloud_gcp_vm, storage]
+
+- name: "GCP Storage — Create and attach data disks if specified"
+  when: gcp_data_disks is defined and gcp_data_disks | length > 0
+  block:
+    - name: "GCP Storage — Loop over data disks"
+      google.cloud.gcp_compute_disk:
+        name: "{{ sba_name }}-data-{{ item.index | default(loop.index0) }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        size_gb: "{{ item.size_gb }}"
+        type: "zones/{{ gcp_zone }}/diskTypes/{{ item.disk_type | default('pd-balanced') }}"
+        labels: "{{ gcp_instance_labels }}"
+        state: present
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      loop: "{{ gcp_data_disks }}"
+      loop_control:
+        index_var: index
+      register: gcp_data_disk_results
+      tags: [cloud_gcp_vm, storage, data_disks]
+
+    - name: "GCP Storage — Attach data disks to instance"
+      google.cloud.gcp_compute_instance:
+        name: "{{ sba_name }}"
+        project: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        disks: |
+          {{
+            gcp_create_result.instance.disks +
+            gcp_data_disk_results.results | map(attribute='disk') | map('deviceName') |
+            map('regex_replace', '^(.+)$', {'source': '\\1', 'autoDelete': true, 'boot': false, 'mode': 'READ_WRITE'}) | list
+          }}
+        state: present
+        auth_kind: serviceaccount
+        service_account_email: "{{ gcp_service_account }}"
+      register: gcp_attach_data_disks
+      tags: [cloud_gcp_vm, storage, data_disks]
+
+    - name: "GCP Storage — Record data disk details"
+      ansible.builtin.set_fact:
+        gcp_data_disk_names: "{{ gcp_data_disk_results.results | map(attribute='disk.name') | list }}"
+        gcp_data_disk_sizes_gb: "{{ gcp_data_disk_results.results | map(attribute='disk.sizeGb') | list }}"
+        gcp_data_disk_ids: "{{ gcp_data_disk_results.results | map(attribute='disk.id') | list }}"
+      tags: [cloud_gcp_vm, storage, data_disks]
+
+- name: "GCP Storage — Debug storage info"
+  ansible.builtin.debug:
+    msg: "Boot disk: {{ gcp_boot_disk_name }} ({{ gcp_boot_disk_size_gb }}GB){{ ', Data disks: ' ~ gcp_data_disk_names | join(', ') if gcp_data_disk_names is defined else '' }}"
+  tags: [cloud_gcp_vm, storage]

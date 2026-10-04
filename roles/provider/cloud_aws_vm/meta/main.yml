@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: cloud_aws_vm
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Amazon Web Services VM provisioning role (STUB - Phase 1 not implemented).
+    Maintains the unified provider contract interface for future implementation.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - aws
+    - ec2
+    - cloud
+    - vm
+    - provisioning
+    - stub
+
+dependencies: []
+
+collections:
+  - amazon.aws
+  - ansible.utils
+  - community.general

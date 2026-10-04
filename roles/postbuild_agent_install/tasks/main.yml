@@ -1,0 +1,27 @@
+---
+# Post-Build Agent Install Role - STUB
+# Phase 1: Agent choice not yet decided.
+# This stub fails with a clear TODO list of what needs to be decided/implemented.
+
+- name: "Agent Install — STUB: Agent install not yet implemented in this phase"
+  ansible.builtin.fail:
+    msg: |
+      Agent install (postbuild_agent_install) is not yet implemented in Phase 1.
+      
+      This is a stub role that defines the interface for future implementation.
+      
+      TODO - Decisions needed before implementation:
+      [ ] Agent selection: Dynatrace vs Datadog vs CrowdStrike vs other
+      [ ] Installation method: package (rpm/deb/msi) vs script vs container
+      [ ] Configuration source: AAP survey? Vault? Parameter store? ServiceNow?
+      [ ] Policy/tenant assignment per environment
+      [ ] Connectivity verification (heartbeat, test metric, first scan)
+      [ ] Upgrade/rotation strategy
+      [ ] OS support matrix per agent
+      [ ] Proxy/firewall considerations
+      [ ] Agent uninstall/cleanup procedure
+      [ ] Compliance reporting integration
+      
+      Provider contract reference: docs/architecture/provider-abstraction.md
+      Open questions: docs/open-questions.md
+  tags: [postbuild_agent_install, stub]

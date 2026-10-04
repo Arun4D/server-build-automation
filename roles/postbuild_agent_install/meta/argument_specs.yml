@@ -1,0 +1,41 @@
+---
+# Post-Build Agent Install Argument Specifications - STUB
+# Defines the interface for agent install role.
+
+argument_specs:
+  main:
+    short_description: Post-build agent install role (STUB - not yet implemented)
+    description:
+      - Installs monitoring/security agents on provisioned VMs.
+      - PHASE 1: This is a stub. Agent choice not yet decided.
+    options:
+      sba_instance_id:
+        type: str
+        required: true
+        description:
+          - Unique run identifier from provision step.
+          - Used to correlate agent install with provisioned instance.
+      agent_type:
+        type: str
+        required: true
+        choices: ['dynatrace', 'datadog', 'crowdstrike', 'other']
+        description:
+          - Type of agent to install.
+      agent_install_method:
+        type: str
+        required: true
+        choices: ['package', 'script', 'container']
+        description:
+          - Installation method.
+      agent_config:
+        type: dict
+        required: true
+        description:
+          - Agent-specific configuration (tenant, API key, policy, etc.).
+      agent_install_operation:
+        type: str
+        required: false
+        default: 'install'
+        choices: ['install', 'verify', 'uninstall', 'upgrade']
+        description:
+          - Operation to perform.

@@ -1,0 +1,137 @@
+---
+# GCP VM Create or Adopt Instance
+# Creates a new instance with labels applied atomically, or adopts existing.
+# Uses google.cloud.gcp_compute_instance module.
+
+- name: "GCP Create — Build labels dict for instance creation"
+  ansible.builtin.set_fact:
+    gcp_instance_labels: |
+      {{
+        {
+          'owner': requestor,
+          'cost_center': gcp_cost_center_map[environment][app_tier],
+          'environment': environment,
+          'change_ticket': change_ticket,
+          'sba_instance_id': sba_instance_id
+        } |
+        combine(
+          {'expiry': expiry_date} if expiry_date is defined and expiry_date | length > 0 else {},
+          {'app_tier': app_tier, 'os_family': os_family, 'managed_by': 'sba'}
+        )
+      }}
+  tags: [cloud_gcp_vm, create, labels]
+
+- name: "GCP Create — Build instance resource"
+  ansible.builtin.set_fact:
+    gcp_instance_resource: |
+      {{
+        {
+          'name': sba_name,
+          'project': gcp_project,
+          'zone': gcp_zone,
+          'machineType': "zones/{{ gcp_zone }}/machineTypes/{{ gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1') }}",
+          'disks': [
+            {
+              'autoDelete': true,
+              'boot': true,
+              'initializeParams': {
+                'sourceImage': gcp_image_reference,
+                'diskSizeGb': gcp_root_disk_size_gb | default(30),
+                'diskType': "zones/{{ gcp_zone }}/diskTypes/{{ gcp_root_disk_type | default('pd-balanced') }}"
+              }
+            }
+          ],
+          'networkInterfaces': [
+            {
+              'subnetwork': gcp_subnet,
+              'accessConfigs': (
+                [{'name': 'External NAT', 'type': 'ONE_TO_ONE_NAT'}]
+                if gcp_allow_external_ip | default(false)
+                else []
+              )
+            }
+          ],
+          'serviceAccounts': [
+            {
+              'email': gcp_service_account,
+              'scopes': gcp_scopes | default([
+                'https://www.googleapis.com/auth/devstorage.read_only',
+                'https://www.googleapis.com/auth/logging.write',
+                'https://www.googleapis.com/auth/monitoring.write'
+              ])
+            }
+          ],
+          'labels': gcp_instance_labels,
+          'shieldedInstanceConfig': {
+            'enableSecureBoot': gcp_shielded_secure_boot | default(true),
+            'enableVtpm': gcp_shielded_vtpm | default(true),
+            'enableIntegrityMonitoring': gcp_shielded_integrity_monitoring | default(true)
+          },
+          'deletionProtection': gcp_deletion_protection | default(false),
+          'metadata': {
+            'items': [
+              {'key': 'ssh-keys', 'value': ''},
+              {'key': 'block-project-ssh-keys', 'value': 'true'}
+            ]
+          }
+        } |
+        combine(
+          {'tags': {'items': gcp_network_tags | default([])}} if gcp_network_tags is defined else {}
+        )
+      }}
+  tags: [cloud_gcp_vm, create]
+
+- name: "GCP Create — Create instance (idempotent: state=present)"
+  google.cloud.gcp_compute_instance:
+    name: "{{ sba_name }}"
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    machine_type: "{{ gcp_machine_type | regex_replace('.*/([^/]+)$', '\\1') }}"
+    disks:
+      - auto_delete: true
+        boot: true
+        initialize_params:
+          source_image: "{{ gcp_image_reference }}"
+          disk_size_gb: "{{ gcp_root_disk_size_gb | default(30) }}"
+          disk_type: "zones/{{ gcp_zone }}/diskTypes/{{ gcp_root_disk_type | default('pd-balanced') }}"
+    network_interfaces:
+      - subnetwork: "{{ gcp_subnet }}"
+        access_configs: "{{ [{'name': 'External NAT', 'type': 'ONE_TO_ONE_NAT'}] if gcp_allow_external_ip | default(false) else [] }}"
+    service_accounts:
+      - email: "{{ gcp_service_account }}"
+        scopes: "{{ gcp_scopes | default([
+          'https://www.googleapis.com/auth/devstorage.read_only',
+          'https://www.googleapis.com/auth/logging.write',
+          'https://www.googleapis.com/auth/monitoring.write'
+        ]) }}"
+    labels: "{{ gcp_instance_labels }}"
+    shielded_instance_config:
+      enable_secure_boot: "{{ gcp_shielded_secure_boot | default(true) }}"
+      enable_vtpm: "{{ gcp_shielded_vtpm | default(true) }}"
+      enable_integrity_monitoring: "{{ gcp_shielded_integrity_monitoring | default(true) }}"
+    deletion_protection: "{{ gcp_deletion_protection | default(false) }}"
+    metadata:
+      items:
+        - key: "ssh-keys"
+          value: ""
+        - key: "block-project-ssh-keys"
+          value: "true"
+    tags:
+      items: "{{ gcp_network_tags | default([]) }}"
+    state: present
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_create_result
+  tags: [cloud_gcp_vm, create]
+
+- name: "GCP Create — Set adopted fact based on whether instance was created or already existed"
+  ansible.builtin.set_fact:
+    gcp_adopted: "{{ not gcp_create_result.changed }}"
+    gcp_instance_id: "{{ gcp_create_result.instance.id }}"
+    gcp_instance_self_link: "{{ gcp_create_result.instance.selfLink }}"
+  tags: [cloud_gcp_vm, create]
+
+- name: "GCP Create — Debug create/adopt result"
+  ansible.builtin.debug:
+    msg: "Instance {{ 'adopted' if gcp_adopted else 'created' }}: {{ sba_name }} (ID: {{ gcp_instance_id }})"
+  tags: [cloud_gcp_vm, create]

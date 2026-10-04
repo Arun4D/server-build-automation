@@ -1,0 +1,37 @@
+# GCP Subnet Map
+# Maps environment + app_tier → GCP subnet self_link.
+# Used by: roles/cloud_gcp_vm/tasks/attach_networking.yml
+# Subnets are pre-created in the VPC (not managed by this automation).
+# All values are placeholders — replace with actual subnet self-links per environment.
+
+gcp_subnet_map:
+  dev:
+    web: "projects/<gcp-network-host-project-dev>/regions/us-central1/subnetworks/sba-sub-dev-web-us-central1"
+    app: "projects/<gcp-network-host-project-dev>/regions/us-central1/subnetworks/sba-sub-dev-app-us-central1"
+    db: "projects/<gcp-network-host-project-dev>/regions/us-central1/subnetworks/sba-sub-dev-db-us-central1"
+  staging:
+    web: "projects/<gcp-network-host-project-staging>/regions/us-central1/subnetworks/sba-sub-staging-web-us-central1"
+    app: "projects/<gcp-network-host-project-staging>/regions/us-central1/subnetworks/sba-sub-staging-app-us-central1"
+    db: "projects/<gcp-network-host-project-staging>/regions/us-central1/subnetworks/sba-sub-staging-db-us-central1"
+  prod:
+    web: "projects/<gcp-network-host-project-prod>/regions/us-central1/subnetworks/sba-sub-prod-web-us-central1"
+    app: "projects/<gcp-network-host-project-prod>/regions/us-central1/subnetworks/sba-sub-prod-app-us-central1"
+    db: "projects/<gcp-network-host-project-prod>/regions/us-central1/subnetworks/sba-sub-prod-db-us-central1"
+
+# Subnet metadata for validation and documentation.
+gcp_subnet_metadata:
+  web:
+    purpose: "Public-facing web tier (load balancer backends)"
+    ip_range: "10.x.0.0/24"
+    private_google_access: true
+    flow_logs: true
+  app:
+    purpose: "Application tier (internal services)"
+    ip_range: "10.x.1.0/24"
+    private_google_access: true
+    flow_logs: true
+  db:
+    purpose: "Database tier (restricted access)"
+    ip_range: "10.x.2.0/24"
+    private_google_access: true
+    flow_logs: true

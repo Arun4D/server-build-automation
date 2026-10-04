@@ -1,0 +1,33 @@
+---
+# Cloud Azure VM Role Defaults - STUB
+# Shared defaults for Azure VM provisioning (when implemented).
+# These mirror the cloud_gcp_vm defaults to maintain interface parity.
+
+# Operation to perform
+sba_operation: "provision"
+
+# Retry and timeout settings (shared across all providers)
+sba_retry_attempts: 3
+sba_retry_delay: 5
+sba_delete_timeout: 1800
+sba_wait_ready_timeout: 3600
+
+# Azure-specific defaults (placeholders for future implementation)
+azure_allow_public_ip: false
+azure_public_ip_justification: ""
+
+azure_os_disk_size_gb: 30
+azure_os_disk_type: "Premium_LRS"
+
+azure_encryption_type: "EncryptionAtRestWithPlatformKey"
+
+azure_delete_timeout: 1800
+
+# Network tags (NSG rules)
+azure_network_tags: []
+
+# Data disks (optional)
+azure_data_disks: []
+
+# OS family for wait_for_ready
+azure_os_family: "{{ os_family }}"

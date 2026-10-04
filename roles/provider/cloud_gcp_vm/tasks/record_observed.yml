@@ -1,0 +1,53 @@
+---
+# GCP VM Record Observed Provider Resource IDs
+# Writes provider resource IDs into sba_facts for downstream consumption.
+
+- name: "GCP Record — Build sba_facts.server"
+  ansible.builtin.set_fact:
+    sba_facts:
+      server:
+        instance_id: "{{ gcp_instance_id }}"
+        instance_name: "{{ sba_name }}"
+        state: "{{ gcp_create_result.instance.status }}"
+        private_ip: "{{ gcp_nic_network_ip }}"
+        public_ip: "{{ gcp_nic_external_ip | default('') }}"
+        fqdn: "{{ sba_fqdn }}"
+        parent_scope: "{{ gcp_project }}"
+        zone: "{{ gcp_zone }}"
+        region: "{{ gcp_region }}"
+        adopted: "{{ gcp_adopted }}"
+      network:
+        vpc_id: "{{ gcp_nic_network }}"
+        subnet_id: "{{ gcp_nic_subnetwork }}"
+        nic_id: "{{ gcp_nic_name }}"
+        private_ip: "{{ gcp_nic_network_ip }}"
+        public_ip: "{{ gcp_nic_external_ip | default('') }}"
+        availability_zone: "{{ gcp_zone }}"
+      disk:
+        os_disk_id: "{{ gcp_boot_disk_name }}"
+        os_disk_size_gb: "{{ gcp_boot_disk_size_gb }}"
+        os_disk_type: "{{ gcp_boot_disk_type }}"
+        data_disk_ids: "{{ gcp_data_disk_ids | default([]) }}"
+        data_disk_sizes_gb: "{{ gcp_data_disk_sizes_gb | default([]) }}"
+      image:
+        applied_image_id: "{{ gcp_image_reference }}"
+        applied_version: "{{ gcp_image_reference | regex_replace('.*/([^/]+)$', '\\1') }}"
+        applied_digest: "{{ gcp_image_reference }}"
+      tags:
+        applied: "{{ gcp_instance_labels }}"
+        verified: true
+  tags: [cloud_gcp_vm, record]
+
+- name: "GCP Record — Build sba_result"
+  ansible.builtin.set_fact:
+    sba_result:
+      changed: "{{ gcp_create_result.changed }}"
+      status: "{{ 'created' if gcp_create_result.changed else 'adopted' }}"
+      duration_s: "{{ gcp_create_result.elapsed | default(0) | round(2) }}"
+      error_code: "{{ gcp_create_result.error_code | default('') }}"
+  tags: [cloud_gcp_vm, record]
+
+- name: "GCP Record — Debug recorded facts"
+  ansible.builtin.debug:
+    msg: "Recorded sba_facts for instance {{ sba_name }}"
+  tags: [cloud_gcp_vm, record]

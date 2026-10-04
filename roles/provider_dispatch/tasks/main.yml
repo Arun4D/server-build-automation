@@ -1,0 +1,65 @@
+---
+# Provider Dispatch Role
+# Routes the cloud variable to the appropriate provider role.
+# Phase 1: Only GCP is implemented. Azure and AWS fail fast with clear messages.
+# This is the abstraction seam — playbooks include this role, not provider roles directly.
+
+- name: "Provider Dispatch — Validate cloud input"
+  ansible.builtin.assert:
+    that:
+      - cloud is defined
+      - cloud in ['gcp', 'azure', 'aws']
+    fail_msg: |
+      Invalid cloud provider '{{ cloud | default("undefined") }}'.
+      Supported providers: gcp, azure, aws.
+      Phase 1 only implements GCP; azure and aws are stubbed.
+    quiet: true
+  tags: [provider_dispatch, validate]
+
+- name: "Provider Dispatch — Set provider role name"
+  ansible.builtin.set_fact:
+    provider_role_name: "{{ _provider_role_map[cloud] }}"
+  vars:
+    _provider_role_map:
+      gcp: "cloud_gcp_vm"
+      azure: "cloud_azure_vm"
+      aws: "cloud_aws_vm"
+  tags: [provider_dispatch, validate]
+
+- name: "Provider Dispatch — Compute derived naming variables"
+  ansible.builtin.set_fact:
+    environment_short: "{{ environment_short_map[environment] }}"
+    app_tier_short: "{{ app_tier_short_map[app_tier] }}"
+    os_short: "{{ os_short_map[os_family] }}"
+    sequence: "{{ gcp_sequence_format | format(1) }}"  # Default sequence; overridden by naming role if needed
+  tags: [provider_dispatch, dispatch]
+
+- name: "Provider Dispatch — Include provider role"
+  ansible.builtin.include_role:
+    name: "{{ provider_role_name }}"
+  vars:
+    # Pass through all provider contract variables
+    cloud: "{{ cloud }}"
+    environment: "{{ environment }}"
+    os_family: "{{ os_family }}"
+    app_tier: "{{ app_tier }}"
+    vm_count: "{{ vm_count }}"
+    requestor: "{{ requestor }}"
+    change_ticket: "{{ change_ticket }}"
+    expiry_date: "{{ expiry_date | default(omit) }}"
+    # Derived variables from lookup tables (loaded via group_vars/all)
+    gcp_project: "{{ gcp_project_map[environment] }}"
+    gcp_region: "{{ gcp_region_map[environment][app_tier] }}"
+    gcp_zone: "{{ gcp_zone_map[gcp_region_map[environment][app_tier]].primary }}"
+    gcp_subnet: "{{ gcp_subnet_map[environment][app_tier] }}"
+    gcp_image_family: "{{ gcp_image_family_map[os_family] }}"
+    gcp_machine_type: "{{ gcp_machine_type_map[app_tier][gcp_default_size_profile[app_tier]] }}"
+    gcp_service_account: "{{ gcp_service_account_map[environment] }}"
+    gcp_network: "{{ gcp_network_map[environment] }}"
+    gcp_labels: "{{ gcp_required_labels | map(attribute='key') | list }}"
+    gcp_annotations: "{{ gcp_annotations | map(attribute='key') | list }}"
+    sba_instance_id: "{{ sba_instance_id | default(uuid | string) }}"
+    sba_name: "{{ sba_name | default('sba-' ~ environment_short ~ '-' ~ app_tier_short ~ '-' ~ os_short ~ '-' ~ sequence) }}"
+    sba_fqdn: "{{ sba_fqdn | default(sba_name ~ '.internal') }}"
+    sba_operation: "{{ sba_operation | default('provision') }}"
+  tags: [provider_dispatch, dispatch]

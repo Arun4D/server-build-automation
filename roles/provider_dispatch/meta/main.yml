@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: provider_dispatch
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Provider dispatch role. Routes cloud variable to the appropriate provider role
+    (cloud_gcp_vm, cloud_azure_vm, cloud_aws_vm). Phase 1 only implements GCP;
+    Azure and AWS are stubbed with fail tasks.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - provider
+    - dispatch
+    - abstraction
+
+dependencies: []
+
+collections:
+  - ansible.utils

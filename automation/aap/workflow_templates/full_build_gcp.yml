@@ -1,0 +1,185 @@
+---
+# AAP Workflow Template: Full GCP Build Pipeline
+# Chains: Provision → Domain Join → Agent Install
+# Each step can be approved independently or run automatically.
+
+workflow_template:
+  name: "Full GCP Build Pipeline"
+  description: "End-to-end GCP VM provisioning with domain join and agent install"
+  organization: "Server Build Automation"
+  inventory: ""  # Workflow uses job template inventories
+  extra_vars: {}
+  survey_enabled: true
+  survey_spec:
+    - name: "cloud"
+      question: "Target Cloud Provider"
+      type: "multiplechoice"
+      required: true
+      default: "gcp"
+      choices:
+        - "gcp"
+    - name: "environment"
+      question: "Deployment Environment"
+      type: "multiplechoice"
+      required: true
+      default: "dev"
+      choices:
+        - "dev"
+        - "staging"
+        - "prod"
+    - name: "os_family"
+      question: "OS Family/Version"
+      type: "multiplechoice"
+      required: true
+      default: "rhel9"
+      choices:
+        - "rhel9"
+        - "ubuntu2204"
+        - "windows2022"
+    - name: "app_tier"
+      question: "Application Tier"
+      type: "multiplechoice"
+      required: true
+      default: "web"
+      choices:
+        - "web"
+        - "app"
+        - "db"
+    - name: "vm_count"
+      question: "Number of VMs"
+      type: "integer"
+      required: true
+      default: 1
+      minimum: 1
+      maximum: 20
+    - name: "requestor"
+      question: "Requestor (ServiceNow User)"
+      type: "text"
+      required: true
+      min_length: 1
+      max_length: 64
+    - name: "change_ticket"
+      question: "Change Ticket (ServiceNow CHG)"
+      type: "text"
+      required: true
+      min_length: 10
+      max_length: 20
+    - name: "expiry_date"
+      question: "Expiry Date (Optional)"
+      type: "text"
+      required: false
+      default: ""
+    - name: "run_domain_join"
+      question: "Run Domain Join After Provision?"
+      type: "multiplechoice"
+      required: true
+      default: "true"
+      choices:
+        - "true"
+        - "false"
+    - name: "domain_controller"
+      question: "Domain Controller FQDN"
+      type: "text"
+      required: false
+      help_text: "Required if run_domain_join=true"
+    - name: "domain_realm"
+      question: "Kerberos Realm"
+      type: "text"
+      required: false
+      help_text: "Required if run_domain_join=true (e.g., EXAMPLE.COM)"
+    - name: "domain_ou"
+      question: "Organizational Unit Path"
+      type: "text"
+      required: false
+      help_text: "Required if run_domain_join=true"
+    - name: "domain_join_user"
+      question: "Domain Join Account"
+      type: "text"
+      required: false
+      help_text: "Required if run_domain_join=true"
+    - name: "domain_join_password"
+      question: "Domain Join Password"
+      type: "password"
+      required: false
+      help_text: "Required if run_domain_join=true"
+    - name: "run_agent_install"
+      question: "Run Agent Install After Provision?"
+      type: "multiplechoice"
+      required: true
+      default: "true"
+      choices:
+        - "true"
+        - "false"
+    - name: "agent_type"
+      question: "Agent Type"
+      type: "multiplechoice"
+      required: false
+      default: "dynatrace"
+      choices:
+        - "dynatrace"
+        - "datadog"
+        - "crowdstrike"
+        - "other"
+      help_text: "Required if run_agent_install=true"
+    - name: "agent_install_method"
+      question: "Installation Method"
+      type: "multiplechoice"
+      required: false
+      default: "package"
+      choices:
+        - "package"
+        - "script"
+        - "container"
+      help_text: "Required if run_agent_install=true"
+    - name: "agent_config"
+      question: "Agent Configuration (JSON)"
+      type: "textarea"
+      required: false
+      help_text: "Required if run_agent_install=true"
+
+  workflow_nodes:
+    - name: "Provision GCP VMs"
+      job_template: "Provision GCP VMs"
+      identifier: "provision_gcp"
+      extra_vars:
+        cloud: "{{ cloud }}"
+        environment: "{{ environment }}"
+        os_family: "{{ os_family }}"
+        app_tier: "{{ app_tier }}"
+        vm_count: "{{ vm_count }}"
+        requestor: "{{ requestor }}"
+        change_ticket: "{{ change_ticket }}"
+        expiry_date: "{{ expiry_date }}"
+        sba_operation: "provision"
+      success_nodes:
+        - "Domain Join (Conditional)"
+        - "Agent Install (Conditional)"
+
+    - name: "Domain Join (Conditional)"
+      job_template: "Post-Build Domain Join (GCP)"
+      identifier: "domain_join"
+      extra_vars:
+        sba_instance_id: "{{ provision_gcp.instance_id }}"
+        domain_controller: "{{ domain_controller }}"
+        domain_realm: "{{ domain_realm }}"
+        domain_ou: "{{ domain_ou }}"
+        domain_join_user: "{{ domain_join_user }}"
+        domain_join_password: "{{ domain_join_password }}"
+      when: "{{ run_domain_join == 'true' }}"
+      success_nodes:
+        - "Agent Install (Conditional)"
+
+    - name: "Agent Install (Conditional)"
+      job_template: "Post-Build Agent Install (GCP)"
+      identifier: "agent_install"
+      extra_vars:
+        sba_instance_id: "{{ provision_gcp.instance_id }}"
+        agent_type: "{{ agent_type }}"
+        agent_install_method: "{{ agent_install_method }}"
+        agent_config: "{{ agent_config }}"
+      when: "{{ run_agent_install == 'true' }}"
+
+  labels:
+    - "gcp"
+    - "full-pipeline"
+    - "phase1"

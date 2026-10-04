@@ -1,0 +1,63 @@
+---
+# AAP Job Template: Post-Build Domain Join (GCP)
+# Survey includes instance_id from provision + domain join parameters.
+# Targets hosts via GCP dynamic inventory.
+
+job_template:
+  name: "Post-Build Domain Join (GCP)"
+  description: "Joins provisioned GCP VMs to Active Directory domain"
+  job_type: "run"
+  inventory: "GCP Dynamic Inventory"
+  project: "Server Build Automation"
+  playbook: "playbooks/post_build_domain_join.yml"
+  credentials:
+    - "GCP Service Account - Dev"
+    - "GCP Service Account - Staging"
+    - "GCP Service Account - Prod"
+    - "Domain Join Credentials"  # Separate credential for AD join account
+  execution_environment: "Server Build Automation EE"
+  fork_limit: 20
+  timeout: 1800
+  verbosity: 2
+  become_enabled: true
+  ask_variables_on_launch: true
+  survey_enabled: true
+  survey_spec:
+    - name: "sba_instance_id"
+      question: "Instance ID (from Provision Run)"
+      type: "text"
+      required: true
+      min_length: 36
+      max_length: 36
+      help_text: "Unique run identifier from provision step (UUID format)"
+    - name: "domain_controller"
+      question: "Domain Controller FQDN"
+      type: "text"
+      required: true
+      help_text: "Active Directory domain controller FQDN (e.g., dc.example.com)"
+    - name: "domain_realm"
+      question: "Kerberos Realm"
+      type: "text"
+      required: true
+      help_text: "Kerberos realm in uppercase (e.g., EXAMPLE.COM)"
+    - name: "domain_ou"
+      question: "Organizational Unit Path"
+      type: "text"
+      required: true
+      help_text: "OU path for computer object (e.g., OU=Servers,OU=Dev,DC=example,DC=com)"
+    - name: "domain_join_user"
+      question: "Domain Join Account"
+      type: "text"
+      required: true
+      help_text: "Account with domain join permissions"
+    - name: "domain_join_password"
+      question: "Domain Join Password"
+      type: "password"
+      required: true
+      help_text: "Credential for domain join account"
+  extra_vars: {}
+  labels:
+    - "gcp"
+    - "post-build"
+    - "domain-join"
+    - "phase1"

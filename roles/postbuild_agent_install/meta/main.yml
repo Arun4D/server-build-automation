@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: postbuild_agent_install
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Post-build agent install role (STUB - Phase 1 not implemented).
+    Installs monitoring/security agents on provisioned VMs.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - monitoring
+    - security
+    - agent
+    - post-build
+    - stub
+
+dependencies: []
+
+collections:
+  - community.general

@@ -1,0 +1,54 @@
+---
+# GCP VM Wait for Ready
+# Waits for instance to reach RUNNING state and guest agent to be responsive.
+
+- name: "GCP Wait — Wait for instance RUNNING status"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    name: "{{ sba_name }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_instance_status
+  until:
+    - gcp_instance_status.instance.status == "RUNNING"
+  retries: "{{ sba_wait_ready_timeout | default(3600) / sba_retry_delay | default(5) }}"
+  delay: "{{ sba_retry_delay | default(5) }}"
+  changed_when: false
+  tags: [cloud_gcp_vm, wait]
+
+- name: "GCP Wait — Wait for guest agent (OS Login / metadata server)"
+  ansible.builtin.wait_for:
+    host: "{{ gcp_nic_network_ip }}"
+    port: 22
+    timeout: "{{ sba_wait_ready_timeout | default(3600) }}"
+    delay: 10
+    state: started
+  when: gcp_os_family != 'windows2022'
+  tags: [cloud_gcp_vm, wait, guest_agent]
+
+- name: "GCP Wait — Wait for WinRM (Windows)"
+  ansible.builtin.wait_for:
+    host: "{{ gcp_nic_network_ip }}"
+    port: 5986
+    timeout: "{{ sba_wait_ready_timeout | default(3600) }}"
+    delay: 10
+    state: started
+  when: gcp_os_family == 'windows2022'
+  tags: [cloud_gcp_vm, wait, guest_agent]
+
+- name: "GCP Wait — Verify instance metadata accessible"
+  google.cloud.gcp_compute_instance_info:
+    project: "{{ gcp_project }}"
+    zone: "{{ gcp_zone }}"
+    name: "{{ sba_name }}"
+    auth_kind: serviceaccount
+    service_account_email: "{{ gcp_service_account }}"
+  register: gcp_final_instance
+  changed_when: false
+  tags: [cloud_gcp_vm, wait]
+
+- name: "GCP Wait — Debug ready status"
+  ansible.builtin.debug:
+    msg: "Instance {{ sba_name }} is RUNNING and guest agent responsive"
+  tags: [cloud_gcp_vm, wait]

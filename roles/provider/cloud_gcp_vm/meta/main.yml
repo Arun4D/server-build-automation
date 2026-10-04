@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: cloud_gcp_vm
+  namespace: sba
+  author: Server Build Automation Platform
+  description: >
+    Google Cloud Platform VM provisioning role. Creates or adopts VMs from golden images
+    using the unified provider contract. Implements provision, get, validate, destroy, and tag operations.
+  license: MIT
+  min_ansible_version: "2.16"
+  galaxy_tags:
+    - gcp
+    - compute
+    - cloud
+    - vm
+    - provisioning
+
+dependencies: []
+
+collections:
+  - google.cloud
+  - ansible.utils
+  - community.general

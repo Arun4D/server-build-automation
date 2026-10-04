@@ -1,0 +1,270 @@
+---
+# GitHub Actions Reusable Workflow: GCP VM Provisioning
+# Invoked via workflow_dispatch (manual) or repository_dispatch (ServiceNow)
+# Uses Workload Identity Federation (OIDC) for GCP authentication - no static keys.
+
+name: "Provision GCP VMs"
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: "Target cloud provider"
+        type: choice
+        required: true
+        options:
+          - gcp
+        default: gcp
+      environment:
+        description: "Deployment environment"
+        type: choice
+        required: true
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+      os_family:
+        description: "OS family/version"
+        type: choice
+        required: true
+        options:
+          - rhel9
+          - ubuntu2204
+          - windows2022
+        default: rhel9
+      app_tier:
+        description: "Application tier"
+        type: choice
+        required: true
+        options:
+          - web
+          - app
+          - db
+        default: web
+      vm_count:
+        description: "Number of VMs to provision (1-20)"
+        type: string
+        required: true
+        default: "1"
+      requestor:
+        description: "ServiceNow user who requested the build"
+        type: string
+        required: true
+      change_ticket:
+        description: "ServiceNow change ticket number (CHG########)"
+        type: string
+        required: true
+      expiry_date:
+        description: "Optional lifecycle expiry date (YYYY-MM-DD)"
+        type: string
+        required: false
+        default: ""
+
+  repository_dispatch:
+    types: [provision_gcp]
+
+permissions:
+  id-token: write  # Required for OIDC token exchange
+  contents: read   # Required for checkout
+
+env:
+  ANSIBLE_FORCE_COLOR: "true"
+  ANSIBLE_STDOUT_CALLBACK: "yaml"
+
+jobs:
+  provision:
+    name: "Provision GCP VMs"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Authenticate to GCP via Workload Identity Federation"
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
+
+      - name: "Set up gcloud CLI"
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: "latest"
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Install Ansible and collections"
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core==2.16.* ansible-lint yamllint
+          ansible-galaxy collection install -r collections/requirements.yml -p collections/
+
+      - name: "Validate input variables"
+        run: |
+          # Additional validation beyond workflow_dispatch schema
+          if [[ "${{ github.event.inputs.vm_count }}" -lt 1 || "${{ github.event.inputs.vm_count }}" -gt 20 ]]; then
+            echo "vm_count must be between 1 and 20"
+            exit 1
+          fi
+          if [[ ! "${{ github.event.inputs.requestor }}" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]; then
+            echo "requestor must be alphanumeric + ._- (1-64 chars)"
+            exit 1
+          fi
+          if [[ ! "${{ github.event.inputs.change_ticket }}" =~ ^CHG[0-9]{7,}$ ]]; then
+            echo "change_ticket must match CHG######## format"
+            exit 1
+          fi
+          if [[ -n "${{ github.event.inputs.expiry_date }}" && ! "${{ github.event.inputs.expiry_date }}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "expiry_date must be YYYY-MM-DD format"
+            exit 1
+          fi
+
+      - name: "Run Ansible lint"
+        run: |
+          ansible-lint --profile production playbooks/provision.yml
+
+      - name: "Run provision playbook"
+        id: provision
+        run: |
+          ansible-playbook playbooks/provision.yml \
+            -e cloud="${{ github.event.inputs.cloud }}" \
+            -e environment="${{ github.event.inputs.environment }}" \
+            -e os_family="${{ github.event.inputs.os_family }}" \
+            -e app_tier="${{ github.event.inputs.app_tier }}" \
+            -e vm_count="${{ github.event.inputs.vm_count }}" \
+            -e requestor="${{ github.event.inputs.requestor }}" \
+            -e change_ticket="${{ github.event.inputs.change_ticket }}" \
+            -e expiry_date="${{ github.event.inputs.expiry_date }}" \
+            -e sba_instance_id="${{ github.run_id }}-${{ github.run_attempt }}"
+
+      - name: "Extract provisioning results"
+        if: always()
+        run: |
+          if [[ -f .run_result_*.json ]]; then
+            RESULT_FILE=$(ls .run_result_*.json | head -1)
+            cat $RESULT_FILE
+            echo "result=$(cat $RESULT_FILE | jq -c .)" >> $GITHUB_OUTPUT
+          else
+            echo "result={}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Post provisioning summary to workflow run"
+        if: always()
+        run: |
+          if [[ -f .run_result_*.json ]]; then
+            RESULT_FILE=$(ls .run_result_*.json | head -1)
+            INSTANCE_ID=$(jq -r '.instance_id' $RESULT_FILE)
+            INSTANCE_NAME=$(jq -r '.instance_name' $RESULT_FILE)
+            PRIVATE_IP=$(jq -r '.private_ip' $RESULT_FILE)
+            PUBLIC_IP=$(jq -r '.public_ip' $RESULT_FILE)
+            FQDN=$(jq -r '.fqdn' $RESULT_FILE)
+            STATUS=$(jq -r '.status' $RESULT_FILE)
+            
+            echo "## Provisioning Summary" >> $GITHUB_STEP_SUMMARY
+            echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Instance ID | $INSTANCE_ID |" >> $GITHUB_STEP_SUMMARY
+            echo "| Name | $INSTANCE_NAME |" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | $STATUS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Private IP | $PRIVATE_IP |" >> $GITHUB_STEP_SUMMARY
+            echo "| Public IP | $PUBLIC_IP |" >> $GITHUB_STEP_SUMMARY
+            echo "| FQDN | $FQDN |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: "Callback to ServiceNow (if callback_url provided)"
+        if: always() && github.event.inputs.callback_url != ''
+        run: |
+          if [[ -f .run_result_*.json ]]; then
+            RESULT_FILE=$(ls .run_result_*.json | head -1)
+            curl -X POST "${{ github.event.inputs.callback_url }}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.SERVICENOW_CALLBACK_TOKEN }}" \
+              -d @$RESULT_FILE
+          fi
+
+  # Separate job for post-build domain join (can be triggered separately)
+  domain_join:
+    name: "Post-Build Domain Join"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: provision
+    if: github.event.inputs.run_domain_join == 'true'
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Authenticate to GCP via Workload Identity Federation"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Install Ansible and collections"
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core==2.16.* ansible-lint yamllint
+          ansible-galaxy collection install -r collections/requirements.yml -p collections/
+
+      - name: "Run domain join playbook"
+        run: |
+          ansible-playbook playbooks/post_build_domain_join.yml \
+            -e sba_instance_id="${{ needs.provision.outputs.result.instance_id }}" \
+            -e domain_controller="${{ secrets.DOMAIN_CONTROLLER }}" \
+            -e domain_realm="${{ secrets.DOMAIN_REALM }}" \
+            -e domain_ou="${{ secrets.DOMAIN_OU }}" \
+            -e domain_join_user="${{ secrets.DOMAIN_JOIN_USER }}" \
+            -e domain_join_password="${{ secrets.DOMAIN_JOIN_PASSWORD }}"
+
+  # Separate job for post-build agent install (can be triggered separately)
+  agent_install:
+    name: "Post-Build Agent Install"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: provision
+    if: github.event.inputs.run_agent_install == 'true'
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Authenticate to GCP via Workload Identity Federation"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Install Ansible and collections"
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core==2.16.* ansible-lint yamllint
+          ansible-galaxy collection install -r collections/requirements.yml -p collections/
+
+      - name: "Run agent install playbook"
+        run: |
+          ansible-playbook playbooks/post_build_agent_install.yml \
+            -e sba_instance_id="${{ needs.provision.outputs.result.instance_id }}" \
+            -e agent_type="${{ github.event.inputs.agent_type }}" \
+            -e agent_install_method="${{ github.event.inputs.agent_install_method }}" \
+            -e agent_config="${{ github.event.inputs.agent_config }}"

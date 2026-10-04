@@ -1,0 +1,68 @@
+---
+# Molecule Converge Playbook for cloud_gcp_vm
+# Tests the role logic with mocked GCP modules.
+# Uses docker driver - no real GCP calls.
+
+- name: Converge cloud_gcp_vm
+  hosts: all
+  gather_facts: false
+  vars:
+    # Mock GCP variables for testing
+    cloud: "gcp"
+    environment: "dev"
+    os_family: "rhel9"
+    app_tier: "web"
+    vm_count: 1
+    requestor: "test.user"
+    change_ticket: "CHG0000001"
+    expiry_date: "2027-12-31"
+    sba_operation: "provision"
+    sba_instance_id: "12345678-1234-1234-1234-123456789012"
+    sba_name: "sba-dev-web-r9-001"
+    sba_fqdn: "sba-dev-web-r9-001.internal"
+
+    # Derived variables (normally from provider_dispatch + group_vars)
+    gcp_project: "test-project"
+    gcp_region: "us-central1"
+    gcp_zone: "us-central1-a"
+    gcp_subnet: "projects/test-project/regions/us-central1/subnetworks/test-subnet"
+    gcp_image_family: "projects/test-project/global/images/family/rhel-9-gold"
+    gcp_machine_type: "e2-standard-4"
+    gcp_service_account: "test-sa@test-project.iam.gserviceaccount.com"
+    gcp_network: "projects/test-project/global/networks/test-vpc"
+    gcp_allow_external_ip: false
+    gcp_root_disk_size_gb: 30
+    gcp_root_disk_type: "pd-balanced"
+    gcp_shielded_secure_boot: true
+    gcp_shielded_vtpm: true
+    gcp_shielded_integrity_monitoring: true
+    gcp_deletion_protection: false
+    gcp_scopes:
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/monitoring.write"
+    gcp_network_tags: []
+    gcp_data_disks: []
+    gcp_cost_center_map:
+      dev:
+        web: "CC-DEV-WEB"
+        app: "CC-DEV-APP"
+        db: "CC-DEV-DB"
+    gcp_default_size_profile:
+      web: "medium"
+      app: "medium"
+      db: "medium"
+
+  tasks:
+    - name: Include cloud_gcp_vm role
+      ansible.builtin.include_role:
+        name: cloud_gcp_vm
+      vars:
+        # Override modules to use mock implementations
+        gcp_compute_instance_module: "mock_gcp_compute_instance"
+        gcp_compute_disk_module: "mock_gcp_compute_disk"
+        gcp_compute_image_info_module: "mock_gcp_compute_image_info"
+        gcp_compute_machine_type_info_module: "mock_gcp_compute_machine_type_info"
+        gcp_compute_subnetwork_info_module: "mock_gcp_compute_subnetwork_info"
+        gcp_iam_service_account_info_module: "mock_gcp_iam_service_account_info"
+        gcp_compute_project_info_module: "mock_gcp_compute_project_info"

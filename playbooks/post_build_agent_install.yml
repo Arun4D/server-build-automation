@@ -1,0 +1,60 @@
+---
+# Post-Build Agent Install Playbook (GCP Path)
+# Installs monitoring/security agents on provisioned GCP VMs.
+# Invoked independently after provision.yml completes (can run before/after domain join).
+# Targets hosts in 'gcp_servers' dynamic inventory group (or via add_host from provision run).
+
+- name: Post-Build Agent Install (GCP)
+  hosts: gcp_servers
+  gather_facts: true
+  become: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    # Agent configuration (to be provided via survey/extra vars)
+    # agent_type: "dynatrace" | "datadog" | "crowdstrike" | "other"
+    # agent_install_method: "package" | "script" | "container"
+    # agent_config: {}  # Agent-specific configuration (tenant, API key, policy, etc.)
+
+  pre_tasks:
+    - name: "Agent Install — Validate required variables"
+      ansible.builtin.assert:
+        that:
+          - sba_instance_id is defined
+          - agent_type is defined
+          - agent_type in ['dynatrace', 'datadog', 'crowdstrike', 'other']
+          - agent_install_method is defined
+          - agent_install_method in ['package', 'script', 'container']
+          - agent_config is defined
+        fail_msg: |
+          Agent install requires the following variables:
+          - sba_instance_id (from provision run)
+          - agent_type: dynatrace|datadog|crowdstrike|other
+          - agent_install_method: package|script|container
+          - agent_config: agent-specific configuration (tenant, API key, policy, etc.)
+        quiet: true
+      tags: [agent_install, validate]
+
+    - name: "Agent Install — Debug target host"
+      ansible.builtin.debug:
+        msg: "Installing {{ agent_type }} agent ({{ agent_install_method }}) on {{ inventory_hostname }} ({{ ansible_host }})"
+      tags: [agent_install, validate]
+
+  roles:
+    - role: postbuild_agent_install
+      vars:
+        sba_instance_id: "{{ sba_instance_id }}"
+        agent_type: "{{ agent_type }}"
+        agent_install_method: "{{ agent_install_method }}"
+        agent_config: "{{ agent_config }}"
+      tags: [agent_install]
+
+  post_tasks:
+    - name: "Agent Install — Verify agent connectivity (placeholder)"
+      ansible.builtin.debug:
+        msg: "Agent connectivity verification not yet implemented for {{ agent_type }}"
+      tags: [agent_install, verify]
+
+    - name: "Agent Install — Output result"
+      ansible.builtin.debug:
+        msg: "Agent install initiated for {{ inventory_hostname }}: {{ agent_type }} via {{ agent_install_method }}"
+      tags: [agent_install, summary]

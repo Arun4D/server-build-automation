@@ -1,0 +1,64 @@
+---
+# AAP Dynamic Inventory: GCP Compute Instances
+# Uses the google.cloud.gcp_compute_instance inventory plugin.
+# Filters instances by sba_instance_id label for targeted post-build operations.
+
+plugin: google.cloud.gcp_compute_instance
+
+# Authentication (uses GCP_SERVICE_ACCOUNT_JSON from credential)
+auth_kind: serviceaccount
+service_account_file: "{{ lookup('env', 'GOOGLE_APPLICATION_CREDENTIALS') }}"
+
+# Project and zones to scan
+projects:
+  - "{{ lookup('env', 'GCP_PROJECT_ID') }}"
+zones:
+  - "us-central1-a"
+  - "us-central1-b"
+  - "us-central1-c"
+  - "us-central1-f"
+
+# Filters to reduce inventory scope
+filters:
+  - "labels.sba_instance_id:*"
+
+# Groups to create
+groups:
+  gcp_servers: "'sba_instance_id' in labels"
+  linux_servers: "'linux' in labels.os_family"
+  windows_servers: "'windows' in labels.os_family"
+
+# Host variables to extract
+hostnames:
+  - name
+  - private_ip: networkInterfaces[0].networkIP
+  - public_ip: networkInterfaces[0].accessConfigs[0].natIP
+  - zone: zone
+  - region: zone | regex_replace('.*/([^/]+)-[a-z]$', '\\1')
+  - status: status
+  - labels: labels
+  - instance_id: id
+  - machine_type: machineType | regex_replace('.*/([^/]+)$', '\\1')
+  - service_account: serviceAccounts[0].email
+
+# Compose additional variables
+compose:
+  ansible_host: private_ip
+  ansible_user: "'sba' if 'windows' not in labels.os_family else 'admin'"
+  ansible_port: "22 if 'windows' not in labels.os_family else 5986"
+  ansible_connection: "'ssh' if 'windows' not in labels.os_family else 'winrm'"
+  sba_instance_id: labels.sba_instance_id
+  sba_fqdn: name + ".internal"
+  sba_private_ip: private_ip
+  sba_public_ip: public_ip | default('')
+  sba_zone: zone
+  sba_region: region
+  sba_labels: labels
+  sba_machine_type: machine_type
+  sba_service_account: service_account
+
+# Cache settings
+cache: true
+cache_plugin: jsonfile
+cache_timeout: 3600
+cache_connection: "/tmp/aap_gcp_inventory_cache"
